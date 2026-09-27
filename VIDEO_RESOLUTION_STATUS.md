@@ -1,5 +1,7 @@
 # Video training-resolution experiment — stopped, quality effect unresolved
 
+**Historical attempt:** the later authorized continuation completed successfully. See [the completed 1440 comparison](VIDEO_RESOLUTION_COMPLETED_STATUS.md) for the result: no convincing visual improvement, so the 960 baseline remains selected. The stopped attempt described below is preserved unchanged.
+
 One 1440-pixel attempt was made on September 27, 2026. It stopped cleanly at a predeclared **system-wide swap-growth guard**, before exporting a model. There was no second run, continuation, parameter sweep, pose change or candidate promotion. The result does **not** show that higher resolution has little effect, that Brush crashed, or that this Mac cannot train at 1440.
 
 The user reports that the sharper Scaniverse benchmark was reconstructed on their iPhone 18 Pro. That establishes a useful practical target for this room. This interrupted desktop experiment does not contradict it. The external PLY does not identify Scaniverse's training resolution, frame selection, camera refinement, resource management or other processing settings; we cannot infer those from the finished splat.

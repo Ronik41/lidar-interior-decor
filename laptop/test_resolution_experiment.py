@@ -5,7 +5,8 @@ import tempfile
 import unittest
 import numpy as np
 from PIL import Image
-from resolution_experiment import crop, digest, verify, verify_command
+from resolution_experiment import crop, digest, verify, verify_command, continuation_stop_reason, physical_footprint
+import os
 
 
 class ResolutionControlsTest(unittest.TestCase):
@@ -51,6 +52,20 @@ class ResolutionControlsTest(unittest.TestCase):
         box=[90,600,510,960]
         low=crop(im,box);high=crop(native,box).resize(low.size,Image.Resampling.NEAREST)
         np.testing.assert_array_equal(np.asarray(low),np.asarray(high))
+
+    def test_revised_stop_policy_requires_actual_pressure_failure_or_deadline(self):
+        limits=dict(seconds=1200,critical_pressure_seconds=30)
+        # Swap and RSS are telemetry only; no such values enter this decision.
+        self.assertIsNone(continuation_stop_reason(limits,900,0,'training normally'))
+        self.assertIsNone(continuation_stop_reason(limits,900,29,'training normally'))
+        self.assertEqual(continuation_stop_reason(limits,900,30,''),'sustained critical macOS memory pressure')
+        self.assertEqual(continuation_stop_reason(limits,1201,0,''),'runtime limit')
+        self.assertEqual(continuation_stop_reason(limits,10,0,'Memory allocation of 1234 bytes failed'),'logged allocation failure')
+
+    def test_darwin_footprint_measures_this_process(self):
+        sample=physical_footprint(os.getpid())
+        self.assertGreater(sample['physical_footprint_bytes'],0)
+        self.assertGreater(sample['resident_bytes'],0)
 
 
 if __name__=='__main__': unittest.main()

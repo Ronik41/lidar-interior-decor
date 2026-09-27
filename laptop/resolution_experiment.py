@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """One fixed-camera video-resolution trial. Private inputs/outputs never enter Git."""
 import argparse
+import ctypes
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
@@ -61,6 +62,10 @@ def detail_sheet(base, out, candidate=False):
                                         out/'splat/eval_6000'/name])
         for col, (label, path) in enumerate(zip(labels, paths)):
             with Image.open(path) as im:
+                if candidate and col == 2:
+                    # Match the full-view comparison's raster before selecting
+                    # the fixed crop, rather than gaining a crop-only scale advantage.
+                    im = im.resize((960, 720), Image.Resampling.LANCZOS)
                 tile = crop(im, detail['box'])
             tile.thumbnail((384, 395), Image.Resampling.LANCZOS)
             # Resize both models to the exact same display rectangle, including
@@ -142,7 +147,60 @@ def verify(out, full=False):
             for name, expected in p[key].items():
                 if digest(root/name) != expected:
                     raise ValueError('Preserved file changed: ' + name)
+        if 'preserved_attempt' in p:
+            earlier = p['preserved_attempt']
+            for name, expected in earlier['files'].items():
+                if digest(Path(earlier['path'])/name) != expected:
+                    raise ValueError('Stopped attempt changed: ' + name)
     return p, base
+
+
+def reuse_prepared(previous, out):
+    """User-authorized continuation: read the identical pixels, preserve all old outputs."""
+    p, _ = verify(previous, full=True)
+    if out.exists():
+        raise ValueError('Continuation output already exists')
+    p['preserved_attempt'] = dict(path=str(previous.resolve()), files=inventory(previous))
+    p['stop_limits'] = dict(seconds=1200, critical_pressure_seconds=30)
+    p['monitoring_policy'] = 'Log process RSS, Darwin physical footprint, system memory/swap and pressure. Swap growth alone and RSS alone never stop this continuation. Stop for sustained critical pressure, allocation failure, or runtime limit.'
+    p['continuation_created_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    out.mkdir(parents=True)
+    # Brush only reads this shared input directory; all exports have a new path.
+    (out/'brush-data').symlink_to((previous/'brush-data').resolve(), target_is_directory=True)
+    shutil.copy2(previous/'input-audit-crops.png', out/'input-audit-crops.png')
+    save_json(out/'protocol.json', p)
+    print('Reused verified 1440 images without resizing or changing cameras:', out, flush=True)
+
+
+class DarwinRusageV0(ctypes.Structure):
+    # Layout from the installed macOS SDK's sys/resource.h, RUSAGE_INFO_V0.
+    _fields_ = [('uuid', ctypes.c_uint8 * 16)] + [(name, ctypes.c_uint64) for name in
+                ('user_time', 'system_time', 'pkg_idle_wkups', 'interrupt_wkups', 'pageins',
+                 'wired_size', 'resident_size', 'phys_footprint', 'start_abstime', 'exit_abstime')]
+
+
+def physical_footprint(pid):
+    lib = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+    lib.proc_pid_rusage.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p]
+    info = DarwinRusageV0()
+    if lib.proc_pid_rusage(pid, 0, ctypes.byref(info)) != 0:
+        return dict(physical_footprint_bytes=None, footprint_errno=ctypes.get_errno())
+    return dict(physical_footprint_bytes=info.phys_footprint, wired_bytes=info.wired_size,
+                resident_bytes=info.resident_size, pageins=info.pageins)
+
+
+def current_pressure():
+    return int(subprocess.check_output(['sysctl', '-n', 'kern.memorystatus_vm_pressure_level'], text=True))
+
+
+def continuation_stop_reason(limits, elapsed, critical_seconds, log_tail):
+    if re.search(r'out of memory|failed to allocate|allocation failed|memory allocation.*failed', log_tail, re.I):
+        return 'logged allocation failure'
+    if critical_seconds >= limits['critical_pressure_seconds']:
+        return 'sustained critical macOS memory pressure'
+    if elapsed > limits['seconds']:
+        return 'runtime limit'
+    return None
 
 
 def run(out):
@@ -158,16 +216,21 @@ def run(out):
     cmd[cmd.index('--max-resolution') + 1] = '1440'
     cmd[cmd.index('--export-path') + 1] = str(dest.resolve())
     limits = p['stop_limits']
+    preflight = dict(memory=psutil.virtual_memory()._asdict(), swap=psutil.swap_memory()._asdict(), pressure=current_pressure())
+    if preflight['pressure'] >= 4:
+        save_json(dest/'preflight.json', preflight)
+        raise SystemExit('Critical memory pressure before launch; trainer was not started')
     started = time.monotonic()
     initial_swap = psutil.swap_memory().used
     report = dict(command=cmd, started_at=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-                  limits=limits, initial_swap_bytes=initial_swap, samples=[], evaluation_kind='training_reprojection')
+                  limits=limits, preflight=preflight, initial_swap_bytes=initial_swap, samples=[], evaluation_kind='training_reprojection')
     save_json(dest/'run.json', report)
     critical_start = None
     with (dest/'process.log').open('w') as log:
         proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT,
                                 env={**os.environ, 'RUST_LOG': 'info,brush_dataset::scene=warn'})
         process = psutil.Process(proc.pid)
+        report['pid'] = proc.pid
         reason = None
         try:
             while proc.poll() is None:
@@ -177,15 +240,17 @@ def run(out):
                 except psutil.NoSuchProcess:
                     break
                 swap = psutil.swap_memory().used
-                pressure = int(subprocess.check_output(['sysctl', '-n', 'kern.memorystatus_vm_pressure_level'], text=True))
+                pressure = current_pressure()
                 critical_start = (critical_start or time.monotonic()) if pressure >= 4 else None
                 report['samples'].append(dict(seconds=elapsed, rss_bytes=rss, swap_bytes=swap,
-                                              available_bytes=psutil.virtual_memory().available, memory_pressure=pressure))
-                if elapsed > limits['seconds']: reason = 'runtime limit'
-                if rss > limits['process_rss_gib'] * 2**30: reason = 'process RSS limit'
-                if swap - initial_swap > limits['swap_growth_gib'] * 2**30: reason = 'system swap growth limit'
-                if critical_start and time.monotonic() - critical_start >= limits['critical_pressure_seconds']:
-                    reason = 'sustained critical macOS memory pressure'
+                                              available_bytes=psutil.virtual_memory().available, memory_pressure=pressure,
+                                              **physical_footprint(proc.pid)))
+                critical_seconds = time.monotonic()-critical_start if critical_start else 0
+                reason = continuation_stop_reason(limits, elapsed, critical_seconds, (dest/'process.log').read_text()[-12000:])
+                # Retain reproducibility of the historical protocol; the explicitly
+                # authorized continuation omits both of these former stop limits.
+                if 'process_rss_gib' in limits and rss > limits['process_rss_gib'] * 2**30: reason = 'process RSS limit'
+                if 'swap_growth_gib' in limits and swap - initial_swap > limits['swap_growth_gib'] * 2**30: reason = 'system swap growth limit'
                 if reason:
                     proc.terminate()
                     try: proc.wait(timeout=10)
@@ -203,7 +268,7 @@ def run(out):
             save_json(dest/'run.json', report)
     print(json.dumps({k: v for k, v in report.items() if k != 'samples'}, indent=2))
     if report['exit_code'] != 0 or report['diagnostic_renders'] != 12:
-        raise SystemExit('Bounded run did not complete. Preserve evidence; do not retry.')
+        raise SystemExit('Bounded run did not complete. Preserve evidence and diagnose before any authorized continuation.')
 
 
 def model_info(path):
@@ -308,21 +373,82 @@ def compare(out):
                   delta={k: aggregate['candidate'][k]-aggregate['baseline'][k] for k in aggregate['baseline']},
                   models={m: model_info(path) for m, path in [('baseline', base/'dense/splat/export_6000.ply'), ('candidate', out/'splat/export_6000.ply')]},
                   runtime_seconds=dict(baseline=old_run['seconds'], candidate=new_run['seconds']),
-                  preservation=dict(baseline_files=len(p['baseline_files']), raw_files=len(p['raw_files']), all_unchanged=True),
+                  preservation=dict(baseline_files=len(p['baseline_files']), raw_files=len(p['raw_files']),
+                                    stopped_attempt_files=len(p.get('preserved_attempt',{}).get('files',{})), all_unchanged=True),
                   limits='One run, fixed seed 42 and settings. Different training resolution also changes optimization/densification at the same step budget. Both metrics and fixed diagnostic crops are training-view fit, not independent accuracy. Navigation is qualitative only.')
+    if new_run.get('samples'):
+        samples = new_run['samples']
+        footprints = [s['physical_footprint_bytes'] for s in samples if s.get('physical_footprint_bytes') is not None]
+        report['memory'] = dict(preflight=new_run.get('preflight'),
+            peak_sampled_process_rss_bytes=max(s['rss_bytes'] for s in samples),
+            peak_sampled_process_physical_footprint_bytes=max(footprints) if footprints else None,
+            pressure_levels=sorted({s['memory_pressure'] for s in samples}),
+            system_swap_growth_bytes=samples[-1]['swap_bytes']-new_run['initial_swap_bytes'],
+            policy='Swap growth was logged but did not terminate the continuation. Darwin physical footprint attributes memory to Brush, but does not partition CPU image cache versus GPU training buffers.')
     save_json(out/'comparison.json', report)
     detail_sheet(base, out, candidate=True)
+    memory_plot(out)
     print(json.dumps({k: report[k] for k in ('aggregate', 'delta', 'models', 'runtime_seconds', 'preservation')}, indent=2))
+
+
+def memory_plot(out):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    run = json.loads((out/'splat/run.json').read_text())
+    samples = run['samples']; t = np.array([s['seconds'] for s in samples])/60
+    fig, axes = plt.subplots(2,1,figsize=(10,7),sharex=True,layout='constrained')
+    for field,label in [('physical_footprint_bytes','Brush physical footprint'),('rss_bytes','Brush resident memory'),('available_bytes','System available memory')]:
+        axes[0].plot(t,[(s.get(field) or 0)/2**30 for s in samples],label=label)
+    axes[0].set(ylabel='GiB',title='1440-pixel run: process and system memory');axes[0].legend();axes[0].grid(alpha=.25)
+    axes[1].plot(t,[(s['swap_bytes']-run['initial_swap_bytes'])/2**30 for s in samples],label='System swap change (not process attribution)',color='#8e519b')
+    axes[1].set(xlabel='Minutes since process launch',ylabel='Swap change (GiB)');axes[1].grid(alpha=.25)
+    pressure=axes[1].twinx();pressure.step(t,[s['memory_pressure'] for s in samples],where='post',color='#bb622d',label='macOS pressure');pressure.set_ylim(0,4.5);pressure.set_yticks([1,2,4],['normal','warning','critical'])
+    axes[1].legend(loc='upper left');pressure.legend(loc='upper right')
+    fig.savefig(out/'memory.png',dpi=160);plt.close(fig)
+
+
+def navigation_report(out):
+    """Summarize actual browser captures without treating navigation as an accuracy test."""
+    protocol, _ = verify(out)
+    report = json.loads((out/'comparison.json').read_text())
+    if not report.get('models',{}).get('candidate'):
+        raise ValueError('Both completed models are required for paired navigation evidence')
+    rows = []
+    for index in range(1,4):
+        folder = out/'navigation'/f'navigation-{index}'
+        meta = json.loads((folder/'camera.json').read_text())
+        if meta['camera_before'] != meta['camera_after']:
+            raise ValueError('Camera changed while switching models')
+        if meta['camera_before']['render_size'] != [720,960]:
+            raise ValueError('Navigation display resolution changed')
+        pair = Image.new('RGB',(1440,1004),'#182126'); draw = ImageDraw.Draw(pair)
+        for col,key in enumerate(('baseline','candidate')):
+            image = Image.open(folder/(key+'.png')).convert('RGB')
+            if image.size != (720,960): raise ValueError('Unexpected browser capture dimensions')
+            draw.text((col*720+8,8),key.upper()+' | '+meta['view_label'],fill='white')
+            draw.text((col*720+8,25),'QUALITATIVE ONLY - NO WITHHELD PHOTOGRAPH',fill='white')
+            pair.paste(image,(col*720,44))
+        pair.save(folder/'pair.jpg',quality=96)
+        rows.append(dict(name=folder.name,view_label=meta['view_label'],camera=meta['camera_before'],
+                         exact_shared_camera=True, evaluation_kind='qualitative_navigation_only',
+                         image_sha256={key:digest(folder/(key+'.png')) for key in ('baseline','candidate')}))
+    save_json(out/'navigation/paired-views.json',dict(views=rows,metric_policy=protocol['comparison_policy'],
+        limits='No reference photographs at these moved cameras. Both PLYs rendered by the same Spark renderer at the same camera and display resolution; no accuracy scores.'))
+    print('Verified and assembled three exact-camera navigation pairs')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
     p = sub.add_parser('prepare'); p.add_argument('source', type=Path); p.add_argument('baseline', type=Path); p.add_argument('output', type=Path)
-    for command in ('run', 'compare', 'stopped-report'):
+    p = sub.add_parser('reuse-prepared'); p.add_argument('previous', type=Path); p.add_argument('output', type=Path)
+    for command in ('run', 'compare', 'stopped-report', 'navigation-report'):
         p = sub.add_parser(command); p.add_argument('output', type=Path)
     args = parser.parse_args()
     if args.command == 'prepare': prepare(args.source, args.baseline, args.output)
+    elif args.command == 'reuse-prepared': reuse_prepared(args.previous, args.output)
     elif args.command == 'run': run(args.output)
     elif args.command == 'compare': compare(args.output)
+    elif args.command == 'navigation-report': navigation_report(args.output)
     else: stopped_report(args.output)

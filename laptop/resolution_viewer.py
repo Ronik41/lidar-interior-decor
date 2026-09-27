@@ -45,6 +45,10 @@ def make_server(experiment, port):
         home = home.replace('Open the interactive baseline / candidate switch', 'Inspect the preserved baseline in 3D')
         home = home.replace('Full comparisons use identical camera poses and a common 960×720 raster, displayed upright. The candidate\'s 1440×1080 native render is downsampled once with Lanczos; the baseline is unchanged.', 'The twelve full views show original frames, actual 960×720 Brush inputs, mesh renders and baseline splat renders at matching cameras, displayed upright. The planned baseline/candidate comparison could not be performed.')
         home += '<p><b>Run stopped; no candidate model exists.</b> The preset system-swap growth guard stopped Brush after 63.4 seconds. Last logged refinement: step 601. No retry, candidate metrics, quality verdict or promotion. This does not establish that 1440 is too demanding on an otherwise idle Mac.</p>'
+    assessment_path = experiment/'visual-assessment.json'
+    if assessment_path.exists():
+        assessment = json.loads(assessment_path.read_text())
+        home += f'<p><b>{html.escape(assessment["result"])}</b> {html.escape(assessment["comparison_switch"])}</p>'
     home += '<table><tr><th>Result</th><th>PSNR</th><th>SSIM</th><th>Splats</th><th>PLY MB</th><th>Run seconds</th></tr>'
     for k in ('baseline', 'candidate'):
         m, s = report['models'][k], report['aggregate'][k]
@@ -52,10 +56,18 @@ def make_server(experiment, port):
             home += f'<tr><td>Candidate stopped</td><td>Unavailable</td><td>Unavailable</td><td>No export</td><td>No export</td><td>{report["runtime_seconds"][k]:.1f}</td></tr>'
             continue
         home += f'<tr><td>{k}</td><td>{s["psnr_db"]:.3f}</td><td>{s["ssim"]:.5f}</td><td>{m["splats"]:,}</td><td>{m["bytes"]/1e6:.2f}</td><td>{report["runtime_seconds"][k]:.1f}</td></tr>'
-    home += '</table><h2>Before training: original → Brush input → mesh → baseline</h2><a href="/assets/input-audit-crops.png"><img src="/assets/input-audit-crops.png"></a>'
+    home += '</table>'
+    if (experiment/'memory.png').exists():
+        home += '<h2>Measured memory during this run</h2><p>Brush physical footprint and resident memory are process measurements. System swap changes include other tasks and are shown separately.</p><img src="/assets/memory.png">'
+    home += '<h2>Before training: original → Brush input → mesh → baseline</h2><a href="/assets/input-audit-crops.png"><img src="/assets/input-audit-crops.png"></a>'
     if completed: home += '<h2>Fixed detail crops: original → baseline → candidate</h2><a href="/assets/detail-comparison.png"><img src="/assets/detail-comparison.png"></a>'
     if (experiment/'navigation/baseline-qualitative.jpg').exists():
         home += '<h2>Navigated baseline checks · qualitative only</h2><p>Three cameras moved 25 cm sideways and 15 cm forward from training positions. No withheld photographs or candidate renders are available for these viewpoints.</p><a href="/assets/navigation/baseline-qualitative.jpg"><img src="/assets/navigation/baseline-qualitative.jpg"></a>'
+    if (experiment/'navigation/paired-views.json').exists():
+        navigation = json.loads((experiment/'navigation/paired-views.json').read_text())
+        home += '<h2>Shared navigated viewpoints · qualitative only</h2><p>Both models rendered by Spark at the identical camera and 720×960 resolution. These moved views have no withheld reference photographs. Baseline is on the left, candidate on the right.</p>'
+        for view in navigation['views']:
+            home += f'<section><h3>{html.escape(view["view_label"])}</h3><a href="/assets/navigation/{view["name"]}/pair.jpg"><img src="/assets/navigation/{view["name"]}/pair.jpg"></a></section>'
     home += ''.join(cards)
 
     class Handler(BaseHTTPRequestHandler):
