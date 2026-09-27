@@ -36,6 +36,8 @@ Header and payload sizes agree. Every field is finite except **475 positive-infi
 
 The label “Scaniverse” comes from the user's identification of this externally produced asset. The PLY has **no source photographs, camera poses, intrinsics, frame timestamps, capture route, depth confidence, training/held-out split, processing duration, settings, unit declaration, or provenance comments**. It cannot establish what device or processing version was used, whether the export was edited, which views it trained on, or whether unseen surfaces were observed. This tests the supplied export in our renderer; it does not evaluate the native Scaniverse app or isolate its algorithm from its capture. Its photographic appearance is not calibrated wall paint or material measurement.
 
+Subsequent user-provided context: the Scaniverse pass was approximately three minutes of walking/video capture and included the ceiling. This is the user's capture description, separate from what the PLY can establish. Both physical passes therefore had similar reported duration; internal frame selection and processing remain unknown.
+
 `benchmark.json`, stored privately beside the PLY, records validation, the source hash, reference scan/frame/reconstruction/mesh hashes and registration. The viewer refuses a changed source PLY, mismatched reference scan/cameras/manifest, path escape, symlinked asset, scaled/sheared/reflected transform or stale validation digest. Only the explicitly registered file is served, on localhost.
 
 ## Rigid registration and scale check
@@ -110,7 +112,9 @@ All **4,621 pre-recorded private input files** were rehashed after the compariso
 
 ## One next experiment — proposed, not run
 
-Run **one joint RGB feature-track camera refinement on the second capture**, then one rebuild at the unchanged 6,000-step settings. Source photos contain furniture detail that our result loses, and the second capture still has a sampled 7.24-pixel median revisit reprojection residual. These observations make multi-view consistency a useful next variable to test; the external PLY does not prove that poses are the dominant cause. The earlier failed experiment used local RGB-D ICP on the first dataset; this proposal uses joint multi-view RGB tracks on the second.
+**Execution update:** the user authorized this proposal. Its single fixed training-track check failed the room-connectivity prerequisite, so optimization and rebuilding were not run. See [JOINT_RGB_REFINEMENT_STATUS.md](JOINT_RGB_REFINEMENT_STATUS.md) for the actual results and stop decision. The proposal below is retained as the original acceptance contract.
+
+Run **one joint RGB feature-track camera refinement on the second capture**, then one rebuild at the unchanged 6,000-step settings. Source photos contain furniture detail that our result loses, and the second capture still has a sampled 7.24-pixel median revisit reprojection residual. These observations make multi-view consistency a useful next variable to test; the external PLY does not prove that poses are the dominant cause. The earlier failed experiment used fixed-mesh rigid color-map registration on the first dataset; this proposal uses joint multi-view RGB tracks on the second.
 
 Freeze the existing 297 training / 60 reserved split, all held-out camera poses, intrinsics and metric scale. Use adjacent and revisit feature tracks with robust outlier rejection, anchor the first camera, and retain ARKit/high-confidence depth constraints to limit drift. Give this single optimization a **20-minute ceiling**; stop if tracks do not connect the room or constraints become unstable. Rebuild the train-only mesh/seed and run **one** 6,000-step, 960-pixel, SH2, 350k-splat reconstruction with the existing **20-minute training ceiling**. No parameter sweep, extra training, new capture or invented detail.
 
