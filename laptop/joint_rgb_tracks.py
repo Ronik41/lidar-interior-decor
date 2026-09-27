@@ -112,6 +112,17 @@ def spatial_support(uv, width, height):
     return len(set(map(tuple,cells))), float(cv2.contourArea(cv2.convexHull(uv.astype('f4')))/(width*height))
 
 
+def fundamental_mask(aa, bb):
+    """A degenerate pair supplies no geometry; never relax the matching thresholds."""
+    try:
+        _, mask = cv2.findFundamentalMat(aa,bb,cv2.USAC_MAGSAC,PROTOCOL['fundamental_threshold_px'],PROTOCOL['fundamental_confidence'],PROTOCOL['fundamental_iterations'])
+        return mask, None
+    except cv2.error as error:
+        if '!model.empty()' not in str(error) or 'setModelParameters' not in str(error):
+            raise
+        return None, str(error)
+
+
 def draw_graph(output, graph, positions):
     """Local evidence using the existing Pillow dependency, without plotting extras."""
     canvas=Image.new('RGB',(1500,780),(22,29,34));draw=ImageDraw.Draw(canvas)
@@ -220,7 +231,8 @@ def worker(source, baseline, output):
         row=dict(first=i,second=j,kind=kind,mutual_matches=len(pairs),accepted=False)
         if len(pairs)>=PROTOCOL['min_pair_inliers']:
             aa,bb=fa['uv'][pairs[:,0]],fb['uv'][pairs[:,1]]
-            _,mask=cv2.findFundamentalMat(aa,bb,cv2.USAC_MAGSAC,PROTOCOL['fundamental_threshold_px'],PROTOCOL['fundamental_confidence'],PROTOCOL['fundamental_iterations'])
+            mask,geometry_error=fundamental_mask(aa,bb)
+            if geometry_error:row['geometry_failure']=geometry_error
             if mask is not None:
                 good=mask.ravel()!=0;selected=pairs[good];aa,bb=aa[good],bb[good]
                 if len(selected)>=3:

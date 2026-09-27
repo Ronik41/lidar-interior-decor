@@ -47,6 +47,8 @@ def verify(root):
 
 def compare(root,output):
     protocol,selection,runs=verify(root)
+    labels_path=root/'view-labels.json'
+    labels=json.loads(labels_path.read_text()) if labels_path.exists() else {}
     if output.exists():raise ValueError('Comparison exists; preserve it')
     output.mkdir(parents=True);rows=[]
     for name,region in zip(selection['held_out'],selection['regions']):
@@ -56,7 +58,7 @@ def compare(root,output):
         paths=[root/'2hz/mesh-held-out'/(stem+'-reference.png')]+[root/p/'splat/eval_6000'/(stem+'.png') for p in ('2hz','dense')]
         images=[Image.open(p).convert('RGB') for p in paths]
         values=[scores(np.asarray(images[0]),np.asarray(im)) for im in images[1:]]
-        row=dict(frame=name,intended_region=region,low_2hz=values[0],dense=values[1],
+        row=dict(frame=name,intended_region=region,observed_content=labels.get(name,'Requested '+region+' view; inspect photograph'),low_2hz=values[0],dense=values[1],
                  delta={k:values[1][k]-values[0][k] for k in values[0]});rows.append(row)
         sheet=Image.new('RGB',(1440,680),(22,27,32));draw=ImageDraw.Draw(sheet)
         for i,(label,im) in enumerate(zip(['HELD-OUT PHOTO','2 HZ · 6000 STEPS','DENSE RGB · 6000 STEPS'],images)):
@@ -69,8 +71,8 @@ def compare(root,output):
         processing_seconds=dict(low_2hz=runs[0]['seconds'],dense=runs[1]['seconds']),
         limits='One fixed-step trial from one capture. Original ARKit cameras are shared evaluation coordinates, not surveyed truth. Timed region labels describe requested phone views; inspect photos to verify their content. No test-time alignment, fitting, cropping or invented detail.')
     (output/'comparison.json').write_text(json.dumps(report,indent=2))
-    cards=''.join(f'<section><h2>{html.escape(r["intended_region"])} · {html.escape(r["frame"])}</h2><p>PSNR {r["low_2hz"]["psnr_db"]:.2f} → {r["dense"]["psnr_db"]:.2f} dB; SSIM {r["low_2hz"]["ssim"]:.3f} → {r["dense"]["ssim"]:.3f}</p><a href="{Path(r["frame"]).stem}-comparison.jpg"><img src="{Path(r["frame"]).stem}-comparison.jpg"></a><p>Native pixels: <a href="{Path(r["frame"]).stem}-0.png">photo</a> · <a href="{Path(r["frame"]).stem}-1.png">2 Hz</a> · <a href="{Path(r["frame"]).stem}-2.png">dense</a></p></section>' for r in rows)
-    (output/'index.html').write_text('<!doctype html><meta charset="utf-8"><title>One capture · RGB density experiment</title><style>body{background:#182126;color:#edf0ec;font:16px system-ui;margin:24px}img{width:100%;max-width:1440px}a{color:#b8ddd2}section{margin:40px 0}</style><h1>Does extra RGB coverage help?</h1><p>Identical held-out cameras, photos, geometry seed and 6,000-step settings. Both models are preserved. Inspect furniture edges, kitchen detail and ceiling gaps at native pixels.</p><p><a href="comparison.json">All metrics and verified controls</a></p>'+cards)
+    cards=''.join(f'<section><h2>{html.escape(r["observed_content"])} · {html.escape(r["frame"])}</h2><p>PSNR {r["low_2hz"]["psnr_db"]:.2f} → {r["dense"]["psnr_db"]:.2f} dB; SSIM {r["low_2hz"]["ssim"]:.3f} → {r["dense"]["ssim"]:.3f}</p><a href="{Path(r["frame"]).stem}-comparison.jpg"><img src="{Path(r["frame"]).stem}-comparison.jpg"></a><p>Native pixels: <a href="{Path(r["frame"]).stem}-0.png">photo</a> · <a href="{Path(r["frame"]).stem}-1.png">2 Hz</a> · <a href="{Path(r["frame"]).stem}-2.png">dense</a></p></section>' for r in rows)
+    (output/'index.html').write_text('<!doctype html><meta charset="utf-8"><title>One capture · RGB density experiment</title><style>body{background:#182126;color:#edf0ec;font:16px system-ui;margin:24px}img{width:100%;max-width:1440px}a{color:#b8ddd2}section{margin:40px 0}</style><h1>Does extra RGB coverage help?</h1><p>Identical held-out cameras, photos, geometry seed and 6,000-step settings. Both models are preserved. Inspect furniture edges, kitchen detail and ceiling gaps at native pixels.</p><p><a href="comparison.json">All metrics and verified controls</a> · <a href="inspection-final/">Furniture, kitchen, ceiling and track graphs</a> · <a href="http://127.0.0.1:53015/">Interactive model switcher</a></p>'+cards)
     print(json.dumps(dict(aggregate=means,delta=report['delta']),indent=2))
 
 

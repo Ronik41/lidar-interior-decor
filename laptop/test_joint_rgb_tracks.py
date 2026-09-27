@@ -1,9 +1,11 @@
 """Verify connectivity rejection and report serialization without private photos."""
 import json
 import unittest
+from unittest.mock import patch
 try:
+    import cv2
     import numpy as np
-    from joint_rgb_tracks import components, bridges, track_graph, spatial_support
+    from joint_rgb_tracks import components, bridges, track_graph, spatial_support, fundamental_mask
     AVAILABLE=True
 except ImportError:
     AVAILABLE=False
@@ -11,6 +13,14 @@ except ImportError:
 
 @unittest.skipUnless(AVAILABLE, 'Optional reconstruction environment required')
 class JointTrackTests(unittest.TestCase):
+    def test_degenerate_pair_is_rejected_but_other_opencv_errors_propagate(self):
+        points=np.zeros((30,2),dtype='f4')
+        with patch('joint_rgb_tracks.cv2.findFundamentalMat',side_effect=cv2.error('!model.empty() in setModelParameters')):
+            mask,error=fundamental_mask(points,points)
+            self.assertIsNone(mask);self.assertIn('!model.empty()',error)
+        with patch('joint_rgb_tracks.cv2.findFundamentalMat',side_effect=cv2.error('unrelated configuration failure')):
+            with self.assertRaises(cv2.error):fundamental_mask(points,points)
+
     def setup_graph(self):
         frames=[{'timestamp_seconds':i*.5} for i in range(40)]
         positions=np.column_stack([np.arange(40)*.1,np.zeros(40),np.zeros(40)])

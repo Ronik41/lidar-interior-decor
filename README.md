@@ -68,9 +68,10 @@ The importer verifies every declared file's SHA-256, checks the JSON, USDZ conta
 The separate opt-in **Dense RGB experiment · 8 Hz** is documented in
 [DENSE_CAPTURE_STATUS.md](DENSE_CAPTURE_STATUS.md). It preserves both existing
 capture modes and adds exact per-frame metadata, optional depth, capture telemetry,
-and a fixed same-capture 2 Hz versus denser reconstruction protocol. Physical dense
-reliability and the new full-pass comparison must be verified before claiming a
-quality improvement; see that status document for current device results.
+and a fixed same-capture 2 Hz versus denser reconstruction protocol. The physical three-minute capture passed (1,424 RGB-D frames). The completed
+controlled comparison found no meaningful overall quality gain: PSNR 19.18 versus
+19.16 dB, SSIM 0.7958 versus 0.7967. Both models and all twelve paired views are
+preserved; see that status document for evidence, route limitations and commands.
 
 On the phone, choose **Sparse RGB + depth experiment** instead of **Start Scanning**. It samples RoomPlan's existing `ARSession.currentFrame` every two seconds, at most 20 sets over 45 seconds. **Only frame sampling stops at that limit; ordinary scanning continues until you tap Done.** The command-line debug probe used for validation separately stops the whole scan at 40 seconds and saves automatically; normal app use does not have that timeout.
 
