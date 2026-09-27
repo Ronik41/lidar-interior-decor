@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { RoomScene } from './editor/scene.js';
 import { photoProjection } from './editor/reference.js';
+import * as THREE from './editor/vendor/three.module.js';
 const identity=[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
 const wall={source:{identifier:'wall'},dimensions_m:[4,3,0],spatial:{transform:identity}};
 const door={source:{identifier:'door'},kind:'doors',parent_identifier:'wall',dimensions_m:[1,2,0],spatial:{transform:identity.slice()},excluded:false};
@@ -16,3 +17,14 @@ const e={spatial:{transform:identity.slice()}};e.spatial.transform[14]=-2;
 assert.deepEqual(photoProjection(e,ref),[.5,.5]);e.spatial.transform[13]=.5;assert.deepEqual(photoProjection(e,ref),[.5,.25]);
 e.spatial.transform[14]=2;assert.equal(photoProjection(e,ref),null,'Behind-camera elements have no reference claim');
 console.log('PASS: wall cuts, excluded apertures, off-plane apertures, boundary clipping, and ARKit photo projection.');
+
+// Switching already-loaded photographic layers must preserve the comparison camera.
+const camera=new THREE.PerspectiveCamera(62,1.5,.02,250);camera.position.set(1,2,3);camera.lookAt(0,1,0);
+const before={position:camera.position.toArray(),quaternion:camera.quaternion.toArray(),fov:camera.fov,aspect:camera.aspect};
+const context={camera,root:new THREE.Group(),captureRoot:new THREE.Group(),meshScan:new THREE.Group(),splatScan:new THREE.Group(),benchmarkScan:new THREE.Group(),renderer:{setClearColor(){}},draw(){},overlay:false};
+for(const mode of ['benchmark','splat','mesh','benchmark']){
+  await RoomScene.prototype.setLayer.call(context,mode);
+  assert.deepEqual({position:camera.position.toArray(),quaternion:camera.quaternion.toArray(),fov:camera.fov,aspect:camera.aspect},before);
+  assert.equal(context.benchmarkScan.visible,mode==='benchmark');assert.equal(context.splatScan.visible,mode==='splat');
+}
+console.log('PASS: benchmark switching preserves camera pose/FOV/aspect and displays one photographic layer.');

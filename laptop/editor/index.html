@@ -27,7 +27,7 @@
       <div class="plan-heading"><div><p class="eyebrow" id="view-eyebrow">3D ROOM · METERS</p><h2 id="view-title">A feel for the space</h2></div><div class="view-tabs" role="group" aria-label="View mode"><button id="view-3d" class="active" aria-pressed="true">3D room</button><button id="view-2d" aria-pressed="false">2D plan</button></div></div>
       <div id="capture-tools" hidden>
         <div class="capture-line"><strong>As scanned</strong><select id="scan-layer" aria-label="3D layer"><option value="mesh">Photographic RGB-D mesh</option><option value="splat">Gaussian splat candidate</option><option value="roomplan">Editable RoomPlan</option></select><label><input id="roomplan-overlay" type="checkbox"> RoomPlan overlay</label></div>
-        <div class="capture-line"><select id="capture-viewpoint" aria-label="Walkthrough viewpoint"></select><button id="go-viewpoint">Go to view</button><button id="walk-mode" class="active">Walk</button><button id="orbit-mode">Orbit</button><button id="expand-room" aria-pressed="false">Expand 3D</button></div>
+        <div class="capture-line"><select id="capture-viewpoint" aria-label="Walkthrough viewpoint"></select><button id="go-viewpoint">Go to view</button><button id="compare-splats" hidden>Switch to Scaniverse</button><button id="walk-mode" class="active">Walk</button><button id="orbit-mode">Orbit</button><button id="expand-room" aria-pressed="false">Expand 3D</button></div>
         <p id="capture-provenance"></p>
       </div>
       <div id="scene-tools"><label><input type="checkbox" id="cutaway" checked> Cutaway walls</label><label><input type="checkbox" id="show-excluded" checked> Excluded outlines</label><button id="focus-3d">Focus selected</button><button id="fit-3d">Fit room</button></div>

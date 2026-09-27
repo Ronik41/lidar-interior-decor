@@ -15,13 +15,14 @@ from urllib.parse import parse_qs, urlparse
 
 from design_input import DesignStore
 from reconstruction_assets import ReconstructionAssets
+from benchmark_assets import BenchmarkAssets
 from import_scan import import_scan, read_object
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = Path(__file__).with_name("editor")
 
 
-def make_server(store, initial_document, initial_filename, port=0, reconstruction=None):
+def make_server(store, initial_document, initial_filename, port=0, reconstruction=None, benchmark=None):
     token = secrets.token_urlsafe(32)
     lock = threading.Lock()
 
@@ -62,7 +63,11 @@ def make_server(store, initial_document, initial_filename, port=0, reconstructio
                     data["token"] = token
                     self.respond(200, data)
                 elif route.path == "/api/reconstruction":
-                    self.respond(200, reconstruction.payload() if reconstruction else None)
+                    data=reconstruction.payload() if reconstruction else None
+                    if data is not None and benchmark:data['benchmark']=benchmark.payload()
+                    self.respond(200, data)
+                elif route.path == '/benchmark/model.ply' and benchmark:
+                    self.respond(200, benchmark.model.read_bytes(), 'application/octet-stream')
                 elif route.path.startswith("/reconstruction/") and reconstruction:
                     name=route.path.removeprefix("/reconstruction/")
                     asset=reconstruction.files.get(name)
@@ -120,6 +125,7 @@ def main():
     parser.add_argument("--port", type=int, default=0, help="Local port (default: any free port)")
     parser.add_argument("--no-open", action="store_true", help="Print the URL without opening a browser")
     parser.add_argument("--reconstruction", type=Path, help="Verified local As scanned asset folder from the same capture")
+    parser.add_argument("--benchmark", type=Path, help="Optional local external benchmark manifest with an explicit rigid registration")
     args = parser.parse_args()
     try:
         source = args.source.expanduser().resolve() if args.source else None
@@ -151,7 +157,9 @@ def main():
             store = DesignStore(scan, ROOT / "design-inputs")
             filename = None
         reconstruction=ReconstructionAssets(args.reconstruction,store) if args.reconstruction else None
-        server = make_server(store, initial or store.new(), filename, args.port,reconstruction)
+        if args.benchmark and not reconstruction:raise ValueError('External benchmark requires the reference reconstruction')
+        benchmark=BenchmarkAssets(args.benchmark,store,reconstruction) if args.benchmark else None
+        server = make_server(store, initial or store.new(), filename, args.port,reconstruction,benchmark)
         url = f"http://127.0.0.1:{server.server_port}"
         print(f"Verified scan: {store.source['scan_id']}\nEditor: {url}\nSaves: {store.output}\nKeep this Terminal running. Ctrl-C stops the editor.", flush=True)
         if not args.no_open:

@@ -140,16 +140,22 @@ export class RoomScene {
     this.setLayer('mesh');this.setNavigation('walk');this.goToView(0);
   }
   async setLayer(mode) {
-    if(mode==='splat' && !this.splatScan){
-      if(!this.reconstruction?.splat_url)throw new Error('No successful Gaussian candidate is available');
+    const benchmark=mode==='benchmark';
+    const member=benchmark?'benchmarkScan':'splatScan';
+    if((mode==='splat'||benchmark) && !this[member]){
+      const url=benchmark?this.reconstruction?.benchmark?.url:this.reconstruction?.splat_url;
+      if(!url)throw new Error('No registered Gaussian candidate is available');
       const {SparkRenderer,SplatMesh}=await import('./vendor/spark.module.js');
-      this.spark=new SparkRenderer({renderer:this.renderer,onDirty:()=>this.requestDraw()});this.scene.add(this.spark);
-      this.splatScan=new SplatMesh({url:this.reconstruction.splat_url});
-      await this.splatScan.initialized;this.captureRoot.add(this.splatScan);
-
+      if(!this.spark){this.spark=new SparkRenderer({renderer:this.renderer,onDirty:()=>this.requestDraw()});this.scene.add(this.spark);}
+      const model=new SplatMesh({url});await model.initialized;
+      if(benchmark){
+        // Object transform rotates positions, Gaussian covariance and SH view directions together.
+        new THREE.Matrix4().fromArray(this.reconstruction.benchmark.source_to_reference_column_major).decompose(model.position,model.quaternion,model.scale);
+      }
+      this[member]=model;this.captureRoot.add(model);
     }
     this.layerMode=mode;this.root.visible=mode==='roomplan'||this.overlay;
-    this.captureRoot.visible=mode!=='roomplan';if(this.meshScan)this.meshScan.visible=mode==='mesh';if(this.splatScan)this.splatScan.visible=mode==='splat';
+    this.captureRoot.visible=mode!=='roomplan';if(this.meshScan)this.meshScan.visible=mode==='mesh';if(this.splatScan)this.splatScan.visible=mode==='splat';if(this.benchmarkScan)this.benchmarkScan.visible=benchmark;
     if(mode==='roomplan'){this.setNavigation('orbit');this.fit();}
     this.renderer.setClearColor(mode==='roomplan'?0xe7ebe7:0x202830,1);this.draw();
   }

@@ -316,12 +316,17 @@ function describeLayer(){
   const mode=scene.layerMode,scanned=mode!=='roomplan';
   $('view-title').textContent=scanned?'Walk through your room':'A feel for the space';
   $('view-eyebrow').textContent=scanned?'AS SCANNED · LOCAL RECONSTRUCTION':'EDITABLE ROOMPLAN · METERS';
+  if(mode==='benchmark')$('view-eyebrow').textContent='EXTERNAL BENCHMARK · RIGIDLY REGISTERED';
+  if(scene.reconstruction)$('capture-provenance').textContent=mode==='benchmark'?scene.reconstruction.benchmark.provenance:scene.reconstruction.provenance;
+  $('compare-splats').textContent=mode==='benchmark'?'Switch to our splat':'Switch to Scaniverse';
   document.querySelector('.scene-caption').textContent=scanned?(scene.navigation==='walk'?'Drag to look · W A S D to move · Q / E down / up · gaps lack reliable data':'Drag to orbit · scroll to zoom · W A S D to move · gaps lack reliable data'):'Bounding-box furniture · drag to orbit · scroll to zoom';
   $('walk-mode').classList.toggle('active',scene.navigation==='walk');$('orbit-mode').classList.toggle('active',scene.navigation==='orbit');
   $('layer-note').textContent=scanned?'Photographs + measured depth from this capture. Gaps, grey surfaces and unseen backs remain unknown. Reflections, thin objects and texture seams may be unreliable. RoomPlan is a separate editable estimate; moving through geometry does not establish physical clearance.':'RoomPlan estimates, not a photorealistic room. Use the inspector and linked plan to edit dimensions and review detections.';
+  if(mode==='benchmark')$('layer-note').textContent='Externally produced Scaniverse PLY · different capture, unknown camera and processing history. Rigid alignment is approximate; no rescaling. Shared viewpoints keep the same viewer camera when switching. Missing areas and reflections remain uncertain. RoomPlan edits apply only to our separate layer.';
   $('scene-tools').hidden=scanned;document.querySelector('.color-key').hidden=scanned;
 }
 $('scan-layer').onchange=()=>action(async()=>{await scene.setLayer($('scan-layer').value);describeLayer();});
+$('compare-splats').onclick=()=>action(async()=>{const next=scene.layerMode==='benchmark'?'splat':'benchmark';await scene.setLayer(next);$('scan-layer').value=next;describeLayer();});
 $('roomplan-overlay').onchange=()=>{scene.overlay=$('roomplan-overlay').checked;scene.root.visible=scene.layerMode==='roomplan'||scene.overlay;scene.draw();};
 $('go-viewpoint').onclick=()=>scene?.goToView(Number($('capture-viewpoint').value));
 $('expand-room').onclick=()=>{const expanded=document.body.classList.toggle('expanded-room');$('expand-room').textContent=expanded?'Show editor':'Expand 3D';$('expand-room').setAttribute('aria-pressed',String(expanded));requestAnimationFrame(()=>scene?.resize());};
@@ -334,6 +339,11 @@ action(async()=>{
     $('capture-tools').hidden=false;$('capture-provenance').textContent=reconstruction.provenance;
     reconstruction.viewpoints.forEach((v,i)=>$('capture-viewpoint').append(node('option',v.label,{value:String(i)})));
     $('scan-layer').querySelector('[value="splat"]').disabled=!reconstruction.splat_url;
+    if(reconstruction.benchmark){
+      $('scan-layer').append(node('option',reconstruction.benchmark.label,{value:'benchmark'}));
+      $('scan-layer').querySelector('[value="splat"]').textContent='Our guided-route splat · 6,000 steps';
+      $('compare-splats').hidden=false;$('capture-tools').classList.add('has-benchmark');
+    }
     message('Loading the photographic reconstruction…');await scene.loadReconstruction(reconstruction);
     if(reconstruction.preferred==='splat'){await scene.setLayer('splat');$('scan-layer').value='splat';}
     describeLayer();message('');
