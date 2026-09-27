@@ -1,6 +1,46 @@
-# Room scan to Mac — Milestone 1
+# Room scan → 3D room review
 
-A local, single-user RoomPlan prototype continued from [Apple's sample](https://developer.apple.com/documentation/roomplan/create-a-3d-model-of-an-interior-room-by-guiding-the-user-through-an-ar-experience). The sample license is retained in `LICENSE.txt`. One room only; no design generation, walkthrough, shopping, accounts in the app, or cloud backend.
+A local, single-user RoomPlan prototype continued from [Apple's sample](https://developer.apple.com/documentation/roomplan/create-a-3d-model-of-an-interior-room-by-guiding-the-user-through-an-ar-experience). The sample license is retained in `LICENSE.txt`. One room only; no design generation, shopping, accounts in the app, or cloud backend.
+
+## Open the 3D room review editor
+
+```sh
+cd "/Users/ronikatch/Documents/ChatGPT/LIDAR interior decor"
+python3 laptop/edit_room.py
+```
+
+This verifies the existing imported room and opens **Room Review**, a local, 3D-first editor. Keep Terminal running; **Ctrl-C** stops it. Python's standard library serves on `127.0.0.1`; a pinned local copy of Three.js renders the model. No npm installation, cloud service, or runtime internet connection is needed. WebGL is required for 3D; the 2D editor remains available when WebGL cannot start.
+
+- **3D room:** drag to orbit, scroll/pinch to zoom, Shift-drag or right-drag to pan. **Fit room** restores the overview; **Focus selected** inspects an element. Arrow keys and +/− work when the canvas has focus. **Cutaway walls** fades near walls while retaining full-height geometry. Turn it off to inspect enclosure. Objects are explicit bounding-box proxies, not photorealistic furniture.
+- **Linked overhead:** the 2D plan stays beneath the model. **2D plan** expands it for layout, estimated dimensions, and clearance inspection. Select geometry, a 3D code label, or an inventory item: both views highlight the same source ID and share one inspector. The inventory resolves overlapping footprints. Plan **+ / −**, drag, and **Fit plan** retain their original behavior.
+- **Inspector:** Keep / Remove / Unsure, label/category corrections, dimensions, and notes work as before. Walls and floors have editable colors; object proxies can also receive a chosen color. **Use my chosen color** records a separate user-choice override. Uncheck it to restore the photo-supported estimate or unknown placeholder. Structure can be excluded; objects use Remove. Source detections are retained, with excluded items shown as contextual outlines in 3D and dashed in 2D.
+- **Needs review:** three cards at a time, from low/missing category confidence, medium/missing-confidence apertures, aperture/wall conflicts, and significant overlapping object estimates. Select a card to focus its 3D element(s), highlight the plan, and see the available photo. **Confirm**, **Save correction**, **Exclude selected**, or **Skip** records the outcome. Corrections use the inspector fields. Skipped items remain accessible through **Show skipped**. There are no prompts for every detection.
+- **Apply edits** previews changes in both views. **Save new revision** also applies pending fields and writes a new immutable file under `design-inputs/<scan-id>/`. Choose a revision and **Reopen** to load it from disk. **Original scan** clears edits without deleting saved revisions; **Reset element** clears its overrides and current review acknowledgements.
+
+The reference photo only covers part of the room. The existing scan has three manually inspected color samples, linked to exact image pixels and the image SHA-256: light wood floor, dark TV face, and a dark TV stand tentatively associated with RoomPlan's “table” detection 14. These are flat, approximate observed tones under that lighting, not calibrated materials or textures. All other source elements use neutral hatching to mean **color unknown**. The visible chair's exact correspondence was uncertain, so its color was left unknown. No wall paint color was inferred from the photo.
+
+The inspector separates **RoomPlan category confidence**, **unverified measurement accuracy**, and **color origin/certainty**. High category confidence never establishes dimensional accuracy. A photo cross shows a projected center, which may be occluded; a dot shows an inspected sample. Elements outside the photo are explicitly labeled as not located in that frame.
+
+### Saved data and demonstrations
+
+```sh
+python3 laptop/edit_room.py "scans/<scan-id>"
+python3 laptop/edit_room.py "design-inputs/<scan-id>/revision-0003.design.json"
+```
+
+ZIPs and external folders still go through the verified importer. Use `--no-open` or `--port 8765` as before. A saved file must remain in its canonical `design-inputs/<scan-id>/` location alongside the matching imported scan.
+
+The original **revision 1** 2D demonstration remains unchanged. **Revision 2** demonstrates a TV label and Keep choice, with no measurement correction. **Revision 3** adds a skipped uncertain-door review and a wall-color override. These are explicitly labeled assistant-entered demonstrations, not the user's final furniture or paint preferences. Start from **Original scan** for a clean review.
+
+New revisions use `roomplan-design-input` **schema 2**, retaining source hashes, IDs, JSON pointers, meter coordinates, and immutable parent filename/SHA-256 links. Schema 1 files still load and upgrade in memory; they are never rewritten. Schema 2 adds `reference_observations`, `reviews`, and separate color/structure-exclusion overrides. The optional private `reference-observations.json` supplies inspected starting colors; saved schema 2 files embed their observations. Back up **both `scans/` and `design-inputs/`**. Raw JSON, USDZ, RGB, metadata, received ZIPs, and earlier revisions remain untouched and Git-ignored.
+
+### Geometry and review limits
+
+The views use the same RoomPlan column-major local-to-world transforms in meters. The floor preserves its concave local-plane polygon. Object dimensions remain local X width / Y height / Z depth. Wall planes are cut using supplied parent-linked door/window/opening spans; no door swing, measured thickness, snapping, or fabricated detailed furniture is added. Cutaways alter visibility only. Missing/curved geometry is explicitly approximate.
+
+Dimension edits resize about the source center. Editing one surface does not move connected elements. Excluding an aperture fills its parent wall in the review model; the raw detection remains. Overlap review uses intersecting convex footprints plus vertical overlap, filters known parent/child pairs, and uses bounded thresholds (more than 0.025 m², 15% of the smaller footprint, and 0.08 m vertical overlap). These are review heuristics, not collision or clearance validation. Geometry/category changes re-open affected acknowledgements. Confirming a conflict does not prove it physically correct.
+
+See [3D_REVIEW_STATUS.md](3D_REVIEW_STATUS.md) for demonstrations and physical capture evidence, and [MILESTONE2_STATUS.md](MILESTONE2_STATUS.md) for the preserved 2D checkpoint.
 
 ## Scan → transfer → open
 
@@ -16,6 +56,25 @@ A local, single-user RoomPlan prototype continued from [Apple's sample](https://
 The importer verifies every declared file's SHA-256, checks the JSON, USDZ container, and optional camera metadata, then publishes a validated copy to `scans/<scan-id>/`. It rechecks the copied files before completing. Re-importing an identical package is safe; conflicting contents never overwrite a previous import. The original ZIP stays untouched.
 
 `--open` opens Finder, the room JSON in TextEdit, the optional RGB image, and a small local USDZ viewer. Drag to orbit and scroll to zoom. The viewer compiles on first use with the installed Xcode toolchain and decodes the model before opening. It is a file-inspection fallback: Finder Quick Look currently reports “Failed to load configuration” on this Mac, even for a readable synthetic USDZ.
+
+## Optional sparse RGB + LiDAR capture
+
+On the phone, choose **Sparse RGB + depth experiment** instead of **Start Scanning**. It samples RoomPlan's existing `ARSession.currentFrame` every two seconds, at most 20 sets over 45 seconds. **Only frame sampling stops at that limit; ordinary scanning continues until you tap Done.** The command-line debug probe used for validation separately stops the whole scan at 40 seconds and saves automatically; normal app use does not have that timeout.
+
+Each accepted sample takes the RGB image, `sceneDepth`, depth-confidence map, timestamp, camera-to-world pose, and camera intrinsics from the **same ARFrame**. A background serial writer holds at most one frame. Non-normal tracking, absent depth/confidence, duplicate timestamps, or a busy writer cause skips. Serious/critical heat or an encoding pass over 750 ms stops sampling. The experiment never runs another ARSession, changes RoomPlan's configuration/frame semantics, or replaces its ARSession delegate. Optional sidecar export failures fall back to the working core scan package.
+
+The extension keeps the core **manifest schema 1** and core `sha256` inventory unchanged. Optional `sparse_frames` metadata contains its own version, index filename (`Frames.json`), and SHA-256 map. New importers validate and preserve both inventories; the original Milestone 1 importer can still read the core payload but drops optional frames, so use the updated importer for archiving new packages. Old packages without this extension continue to import unchanged.
+
+| Optional file | Contents |
+| --- | --- |
+| `Frames.json` | Ordered per-frame timestamps, poses, RGB/depth intrinsics, image/depth resolutions, packed row sizes, checksums, skip/error counters and encoding times |
+| `Frame-NNNN.jpg` | Sensor-native RGB JPEG |
+| `Frame-NNNN.depth.f32` | Row-major, tightly packed little-endian Float32 camera-plane depth in meters; nonfinite/nonpositive pixels are invalid |
+| `Frame-NNNN.confidence.u8` | Matching UInt8 depth confidence: 0 low, 1 medium, 2 high |
+
+Depth intrinsics are scaled from RGB intrinsics to the depth resolution. There is no separately exposed LiDAR hardware timestamp here: synchronization means the values belong to the same ARFrame. Depth confidence is separate from RoomPlan category confidence. These frames are reference evidence; saving them does **not** create a fully textured room. The editor continues to use the original single reference photo for its inspected colors.
+
+Apple documents the existing [RoomPlan ARSession](https://developer.apple.com/documentation/roomplan/roomcapturesession/arsession), [per-frame scene depth](https://developer.apple.com/documentation/arkit/arframe/scenedepth), and [depth/confidence semantics](https://developer.apple.com/documentation/arkit/ardepthdata). Device evidence and limitations are recorded in [3D_REVIEW_STATUS.md](3D_REVIEW_STATUS.md).
 
 ## If sharing is cancelled or AirDrop fails
 
@@ -64,7 +123,7 @@ RGB is an optional **reference photo**, not a textured reconstruction. The manif
 
 ## Verification
 
-Current evidence and outstanding physical-device steps are in `MILESTONE1_STATUS.md`.
+The original scan checkpoint is in `MILESTONE1_STATUS.md`; current 3D review and completed physical RGB-D evidence are in `3D_REVIEW_STATUS.md`.
 
 The first real scan completed on September 26, 2026: capture → saved ZIP → USB transfer → four verified payload hashes → Mac model/data/photo reopening. The imported scan has 8 walls and 20 detected objects, with a 1920×1440 reference photo and matching camera metadata. AirDrop remains an untested alternative. Real captures are local and ignored by Git.
 
@@ -75,6 +134,6 @@ xcodebuild -project RoomPlanExampleApp.xcodeproj -scheme RoomPlanExampleApp \
   -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
 ```
 
-Twelve importer tests exercise flat/nested ZIPs and original folders, no-RGB and RGB packages, repeat import, corruption, scan-ID conflicts, missing files, malformed data, empty rooms, invalid USDZ, and unsafe archive paths. Their room/model data is synthetic and does not establish real RoomPlan capture quality.
+All 40 Python tests pass: 12 original importer tests, 14 original editor tests, 8 review/provenance/legacy-revision tests, and 6 sparse RGB-D package tests. Run `node laptop/test_scene.mjs` for wall aperture cuts and camera projection checks. Their fixture geometry is synthetic; physical capture evidence is reported separately and does not establish dimensional accuracy.
 
 `laptop/test_archive.swift` can be compiled alongside `RoomPlanExampleApp/ScanArchive.swift` to exercise the exact native archive helper on macOS. Local test artifacts and logs belong in ignored `validation/`; app build products and the cached Mac viewer are also ignored.

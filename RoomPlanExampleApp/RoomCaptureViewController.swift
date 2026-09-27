@@ -13,6 +13,11 @@ import CryptoKit
 import AVFoundation
 
 class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, RoomCaptureSessionDelegate {
+    var captureSparseFrames = false
+    var runBoundedProbe = false
+    private var sparseRecorder: SparseFrameRecorder?
+    private var probeTimer: Timer?
+    private var probeEndTimer: Timer?
     
     @IBOutlet var exportButton: UIButton?
     
@@ -99,6 +104,21 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         referenceImage = nil
         referenceMetadata = nil
         roomCaptureView?.captureSession.run(configuration: roomCaptureSessionConfig)
+        if captureSparseFrames {
+            do {
+                sparseRecorder = try SparseFrameRecorder()
+                sparseRecorder?.start(session: roomCaptureView.captureSession.arSession)
+                recordDiagnostic("Sparse experiment enabled: every 2 seconds, at most 20 frames / 45 seconds")
+            } catch {
+                recordDiagnostic("Sparse experiment unavailable; RoomPlan continues: \(error.localizedDescription)")
+            }
+        }
+        #if DEBUG
+        if runBoundedProbe {
+            probeTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.recordDiagnostic("Bounded probe") }
+            probeEndTimer = Timer.scheduledTimer(withTimeInterval: 40, repeats: false) { [weak self] _ in self?.stopSession() }
+        }
+        #endif
         recordDiagnostic("Started RoomPlan")
         startupDiagnosticTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
             self?.recordDiagnostic("Five seconds after start")
@@ -109,13 +129,18 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
     
     private func stopSession() {
         startupDiagnosticTimer?.invalidate()
+        probeTimer?.invalidate()
+        probeEndTimer?.invalidate()
+        sparseRecorder?.stop(reason: isDiscarding ? "scan discarded" : "scan completed")
         guard isScanning else { return }
         isScanning = false
         UIApplication.shared.isIdleTimerDisabled = false
         scanEndedAt = Date()
         if !isDiscarding { captureReferenceFrame() }
+        recordDiagnostic(isDiscarding ? "Scan dismissed" : "Stopped capture; waiting for RoomPlan processing")
         exportButton?.isEnabled = false
         doneButton?.isEnabled = false
+        doneButton?.title = isDiscarding ? "Close" : "Processing…"
         if !isDiscarding { activityIndicator?.startAnimating() }
         roomCaptureView?.captureSession.stop()
         
@@ -124,6 +149,7 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
     
     // Decide to post-process and show the final results.
     func captureView(shouldPresent roomDataForProcessing: CapturedRoomData, error: Error?) -> Bool {
+        recordDiagnostic("RoomPlan requested processing; discarded=\(isDiscarding)")
         if let error {
             DispatchQueue.main.async { self.reportCaptureError(error) }
             return false
@@ -150,10 +176,15 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
             self.doneButton?.title = "Close"
             self.doneButton?.isEnabled = true
             self.activityIndicator?.stopAnimating()
+            self.recordDiagnostic("Processed room: \(processedResult.walls.count) walls, \(processedResult.objects.count) objects")
+            #if DEBUG
+            if self.runBoundedProbe && ProcessInfo.processInfo.arguments.contains("--probe-auto-export") { self.exportResults(UIButton()) }
+            #endif
         }
     }
 
     func captureSession(_ session: RoomCaptureSession, didEndWith data: CapturedRoomData, error: Error?) {
+        recordDiagnostic("RoomPlan session ended; error=\(String(describing: error))")
         if let error {
             DispatchQueue.main.async { self.reportCaptureError(error) }
         }
@@ -163,6 +194,9 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         guard !isDiscarding, !hasReportedCaptureError else { return }
         recordDiagnostic("Capture failed: \(String(reflecting: error)); \(error as NSError)")
         startupDiagnosticTimer?.invalidate()
+        probeTimer?.invalidate()
+        probeEndTimer?.invalidate()
+        sparseRecorder?.stop(reason: "RoomPlan capture error: \(error.localizedDescription)")
         hasReportedCaptureError = true
         isScanning = false
         roomCaptureView.captureSession.stop()
@@ -236,6 +270,8 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         let referenceMetadata = self.referenceMetadata
         let device = UIDevice.current.model
         let systemVersion = UIDevice.current.systemVersion
+        let recorder = sparseRecorder
+        let sparseSummary = recorder?.exportSummary()
         // Keep the UI responsive while RoomPlan exports and the ZIP is written.
         DispatchQueue.global(qos: .userInitiated).async {
             defer { try? FileManager.default.removeItem(at: destinationFolderURL) }
@@ -253,13 +289,31 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
                     try referenceMetadata.write(to: destinationFolderURL.appending(path: "Reference.json"))
                     files += ["Reference.jpg", "Reference.json"]
                 }
+                var sparseFiles: [String] = []
+                var sparseNote = "Not requested; standard RoomPlan scan."
+                if let recorder, let sparseSummary {
+                    do {
+                        sparseFiles = try recorder.copyCompleted(to: destinationFolderURL, summary: sparseSummary)
+                        sparseNote = "Optional sparse ARFrame reference data. See Frames.json for availability and limits."
+                    } catch {
+                        // Publish the working M1 payload even if optional capture/export fails.
+                        sparseNote = "Optional frames unavailable: \(error.localizedDescription). RoomPlan payload preserved."
+                        let leftovers = (try? FileManager.default.contentsOfDirectory(at: destinationFolderURL, includingPropertiesForKeys: nil)) ?? []
+                        for file in leftovers where file.lastPathComponent.hasPrefix("Frame-") || file.lastPathComponent == "Frames.json" { try? FileManager.default.removeItem(at: file) }
+                    }
+                }
 
                 var hashes: [String: String] = [:]
                 for file in files {
                     let data = try Data(contentsOf: destinationFolderURL.appending(path: file))
                     hashes[file] = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
                 }
-                let manifest: [String: Any] = [
+                var sparseHashes: [String: String] = [:]
+                for file in sparseFiles {
+                    let data = try Data(contentsOf: destinationFolderURL.appending(path: file))
+                    sparseHashes[file] = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+                }
+                var manifest: [String: Any] = [
                     "schema_version": 1,
                     "scan_id": scanID,
                     "captured_at": capturedAt,
@@ -273,6 +327,8 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
                         : "No encodable ARKit frame was available when the scan stopped.",
                     "sha256": hashes
                 ]
+                if recorder != nil { manifest["sparse_capture_note"] = sparseNote }
+                if !sparseFiles.isEmpty { manifest["sparse_frames"] = ["schema_version": 1, "index_file": "Frames.json", "sha256": sparseHashes] }
                 let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
                 try manifestData.write(to: destinationFolderURL.appending(path: "manifest.json"))
 
@@ -287,6 +343,13 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
                 DispatchQueue.main.async {
                     self.exportedArchive = archiveURL
                     self.finishExport()
+                    self.recordDiagnostic("Saved package: \(archiveURL.lastPathComponent)")
+                    #if DEBUG
+                    if self.runBoundedProbe && ProcessInfo.processInfo.arguments.contains("--probe-auto-export") {
+                        self.showError(title: "Probe saved", message: "The bounded scan package is saved locally. You can put the phone down.")
+                        return
+                    }
+                    #endif
                     self.shareArchive(archiveURL)
                 }
             } catch {

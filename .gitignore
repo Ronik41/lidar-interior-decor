@@ -5,6 +5,7 @@
 # Finder
 .DS_Store
 scans/
+design-inputs/
 DerivedData/
 validation/
 laptop/.build/

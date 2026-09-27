@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Room Review · Local design input</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" type="module"></script>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="brandmark">⌑</span><div><h1>Room Review</h1><p>YOUR ROOM, IN PERSPECTIVE <span class="local">LOCAL ONLY</span></p></div></div>
+    <div class="file-actions"><button id="original">Original scan</button><select id="versions" aria-label="Saved revision"><option value="">Saved revisions…</option></select><button id="reopen">Reopen</button><button class="primary" id="save">Save new revision</button></div>
+  </header>
+  <div class="statusbar"><span id="source-status">Verifying scan…</span><span id="save-status">Unsaved review</span></div>
+  <div id="message" role="status" aria-live="polite"></div>
+  <main>
+    <aside class="inventory">
+      <section class="review-section"><div class="section-head"><h2>Needs review</h2><span class="count" id="review-count"></span></div><p class="muted">Only uncertain categories and important conflicts.</p><div id="review-queue"></div><button id="show-skipped" class="quiet">Show skipped</button></section>
+      <div class="section-head"><h2>Room elements</h2><span id="element-count" class="count"></span></div>
+      <p class="muted">One selection across 3D, plan, and inspector.</p>
+      <label class="search"><span class="sr-only">Find an element</span><input id="search" placeholder="Find a label or category…" type="search"></label>
+      <div class="filters" role="group" aria-label="Element filter"><button data-filter="all" class="active">All</button><button data-filter="objects">Objects</button><button data-filter="structure">Structure</button></div>
+      <div id="inventory"></div>
+    </aside>
+    <section class="workspace" aria-label="Room review workspace">
+      <div class="plan-heading"><div><p class="eyebrow" id="view-eyebrow">3D ROOM · METERS</p><h2 id="view-title">A feel for the space</h2></div><div class="view-tabs" role="group" aria-label="View mode"><button id="view-3d" class="active" aria-pressed="true">3D room</button><button id="view-2d" aria-pressed="false">2D plan</button></div></div>
+      <div id="scene-tools"><label><input type="checkbox" id="cutaway" checked> Cutaway walls</label><label><input type="checkbox" id="show-excluded" checked> Excluded outlines</label><button id="focus-3d">Focus selected</button><button id="fit-3d">Fit room</button></div>
+      <div id="scene-wrap"><div class="scene-caption">Bounding-box furniture · drag to orbit · scroll to zoom</div><div id="scene"></div><div id="scene-error" hidden></div></div>
+      <div class="overhead-heading"><span>LINKED OVERHEAD <small>layout &amp; dimensions</small></span><div class="zoom"><button id="zoom-out" aria-label="Zoom plan out">−</button><button id="zoom-in" aria-label="Zoom plan in">+</button><button id="fit">Fit plan</button></div></div>
+      <div id="plan-wrap"><svg id="plan" role="img" aria-label="RoomPlan floor plan, one consistent meter scale" preserveAspectRatio="xMidYMid meet"></svg></div>
+      <div class="legend"><span><i class="wall"></i>Wall</span><span><i class="door"></i>Door</span><span><i class="opening"></i>Opening</span><span><i class="keep"></i>Keep</span><span><i class="remove"></i>Remove</span><span><i class="unsure"></i>Unsure</span></div>
+      <div class="color-key"><span><i class="observed"></i>Photo-supported, approximate</span><span><i class="chosen"></i>User choice</span><span><i class="unknown"></i>Hatched = color unknown</span></div>
+      <div class="plan-note"><strong>RoomPlan estimates, not a photorealistic room.</strong> Full-height planes; no measured wall thickness or door swings. Cutaway fades near walls to see inside. The plan helps inspect clearances; it does not validate fit.</div>
+      <div class="summary" id="summary"></div>
+    </section>
+    <aside class="inspector" id="inspector"><p>Select an element to inspect its dimensions and source.</p></aside>
+  </main>
+  <footer><span id="file-path">Edits stay on this Mac.</span><span>3D room review · source preserved</span></footer>
+</body>
+</html>

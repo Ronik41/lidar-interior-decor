@@ -17,6 +17,7 @@ import tempfile
 import uuid
 import zipfile
 from pathlib import Path, PurePosixPath
+from sparse_frames import extension_hashes, validate_sparse
 
 REQUIRED = {"Room.json", "Room.usdz"}
 REFERENCE = {"Reference.jpg", "Reference.json"}
@@ -96,6 +97,7 @@ def validate(source: Path) -> dict:
         with (source / "Reference.jpg").open("rb") as image:
             if image.read(3) != b"\xff\xd8\xff":
                 raise ValueError("Reference.jpg is not a JPEG")
+    validate_sparse(source, manifest)
     return manifest
 
 
@@ -144,11 +146,13 @@ def import_scan(source: Path, destination_root: Path) -> Path:
         with tempfile.TemporaryDirectory(prefix=".incoming-", dir=destination_root) as temporary:
             staging = Path(temporary) / "scan"
             staging.mkdir()
-            for name in ["manifest.json", *manifest["sha256"]]:
+            for name in ["manifest.json", *manifest["sha256"], *extension_hashes(manifest)]:
                 shutil.copy2(folder / name, staging / name)
             validate(staging)
             os.replace(staging, destination)
     print(f"Imported and verified {len(manifest['sha256'])} file checksums: {destination}")
+    if manifest.get("sparse_frames"):
+        print(f"Also verified {len(extension_hashes(manifest))} optional sparse RGB/depth files")
     print(f"Room model: {destination / 'Room.usdz'}")
     print(f"Room data:  {destination / 'Room.json'}")
     print(f"RGB image:  {destination / 'Reference.jpg' if manifest['rgb_reference_available'] else 'unavailable for this scan'}")
