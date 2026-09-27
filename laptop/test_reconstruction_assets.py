@@ -25,3 +25,12 @@ class AssetTests(unittest.TestCase):
     def test_unlisted_model_cannot_be_served(self):
         self.metadata['mesh_url']='/reconstruction/private.jpg'
         with self.assertRaisesRegex(ValueError,'Unlisted'):self.load()
+    def test_dense_index_is_explicit_and_hash_bound(self):
+        self.metadata['frames_index_file']='DenseFrames.json'
+        with self.assertRaisesRegex(ValueError,'provenance'):self.load()
+        (self.scan/'DenseFrames.json').write_text('{}');self.load()
+        (self.scan/'DenseFrames.json').write_text('{"changed":true}')
+        with self.assertRaisesRegex(ValueError,'provenance'):self.load()
+    def test_frame_index_cannot_escape_scan(self):
+        self.metadata['frames_index_file']='../Frames.json'
+        with self.assertRaisesRegex(ValueError,'Unsupported'):self.load()

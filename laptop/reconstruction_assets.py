@@ -9,7 +9,10 @@ class ReconstructionAssets:
         self.metadata=json.loads((self.root/'reconstruction.json').read_text())
         if self.metadata.get('source_scan_id')!=store.source['scan_id']:
             raise ValueError('Reconstruction belongs to a different RoomPlan session; explicit registration is required')
-        index=store.scan/'Frames.json'
+        index_name=self.metadata.get('frames_index_file','Frames.json')
+        if index_name not in ('Frames.json','DenseFrames.json'):
+            raise ValueError('Unsupported reconstruction frame index')
+        index=store.scan/index_name
         if not index.exists() or hashlib.sha256(index.read_bytes()).hexdigest()!=self.metadata.get('frames_sha256'):
             raise ValueError('Reconstruction frame provenance does not match this scan')
         self.files={}
