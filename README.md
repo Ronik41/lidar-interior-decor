@@ -142,7 +142,7 @@ The optional reconstruction environment passes **51 Python tests** with `.venv-r
 
 ## Photographic room reconstruction
 
-The follow-up [pose-refinement experiment](POSE_REFINEMENT_STATUS.md) diagnoses blur and compares one registered rebuild at identical held-out camera poses. The original 6,000-step result remains the preserved baseline. [CAPTURE_GUIDE.md](CAPTURE_GUIDE.md) describes the new standing-position and movement coaching; its native build is verified, but it has not yet been physically recaptured.
+The follow-up [pose-refinement experiment](POSE_REFINEMENT_STATUS.md) diagnoses blur and compares one registered rebuild at identical held-out camera poses. The original 6,000-step result remains the preserved baseline. [The second capture comparison](GUIDED_CAPTURE_COMPARISON.md) processes 357 new frames with the unchanged mesh and 6,000-step splat settings; open it with `./laptop/new_capture.command`. Its independent held-out views are not a controlled PSNR comparison against the original scan. [CAPTURE_GUIDE.md](CAPTURE_GUIDE.md) describes standing-position and movement coaching, but those prompts did **not** appear during the second physical scan: that update had been built but not installed. The old walkthrough command still opens the original result.
 
 The one-room reconstruction work and actual device evidence are documented in [RECONSTRUCTION_STATUS.md](RECONSTRUCTION_STATUS.md). The local source-only review/capture checkpoint is `ff6c088`; nothing was pushed.
 
