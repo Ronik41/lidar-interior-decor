@@ -1,0 +1,14 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Resolution experiment · qualitative walkthrough</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{margin:0;background:#182126;color:#edf0ec;font:15px system-ui}header{padding:16px 24px}h1{font-size:24px;margin:0 0 10px}p{max-width:1150px;line-height:1.5}a{color:#a6e0d5}button,select,input{font:inherit;padding:8px;margin:4px}button[aria-pressed=true]{background:#9addc8}main{display:flex;gap:20px;padding:0 24px}#host{width:min(720px,65vw);flex-shrink:0}canvas{width:100%;height:auto;display:block;touch-action:none}aside{max-width:420px}output{display:block;white-space:pre-wrap;overflow-wrap:anywhere}details{margin-top:20px}#camera{font:11px monospace;max-height:260px;overflow:auto}@media(max-width:850px){main{display:block}#host{width:min(720px,100%)}aside{max-width:none}}
+</style>
+<header><h1>Baseline / 1440 training experiment</h1><a href="/">Back to full views and crops</a><p>Both models remain local. Switching keeps the exact camera and 720×960 render size. Saved training cameras match the photos; moved viewpoints are <b>qualitative checks only</b>. Dark background means missing coverage. This comparison tool has no collision constraint.</p>
+<label>Model <select id="model"><option value="baseline">Baseline · 960-pixel training</option><option value="candidate">Experiment · 1440-pixel training</option></select></label>
+<label>Saved viewpoint <select id="view"></select></label><button id="go">Go to viewpoint</button><button id="switch">Switch model at same camera</button><output id="status">Loading viewer…</output></header>
+<main><div id="host"></div><aside><p>Drag to orbit; scroll to approach; Shift-drag to pan. These controls only move the comparison camera.</p>
+<button id="left">Step left 25 cm</button><button id="right">Step right 25 cm</button><button id="forward">Move forward 25 cm</button><button id="back">Move back 25 cm</button>
+<p>The three saved navigation checks start from artwork, chair/table and kitchen views, translated 25 cm sideways and 15 cm forward. They have no withheld reference photos.</p>
+<label>Evidence name <input id="name" value="navigation-1" pattern="[a-z0-9-]+"></label><button id="capture">Save identical-camera pair locally</button>
+<details><summary>Exact current camera</summary><output id="camera"></output></details>
+</aside></main><script type="module" src="/resolution_walkthrough.js"></script></html>
