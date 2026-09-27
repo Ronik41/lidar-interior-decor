@@ -17,6 +17,7 @@
 		ACEF94C62820AF6600776A9D /* OnboardingViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACEF94C52820AF6600776A9D /* OnboardingViewController.swift */; };
 		FC7100000000000000000001 /* ScanArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC7100000000000000000002 /* ScanArchive.swift */; };
 		FC7200000000000000000001 /* SparseFrameRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC7200000000000000000002 /* SparseFrameRecorder.swift */; };
+		FC7300000000000000000001 /* DenseFrameRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC7300000000000000000002 /* DenseFrameRecorder.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +36,7 @@
 		CD4891E2C9F3F7012DE25B49 /* LICENSE.txt */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = LICENSE.txt; sourceTree = "<group>"; };
 		FC7100000000000000000002 /* ScanArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanArchive.swift; sourceTree = "<group>"; };
 		FC7200000000000000000002 /* SparseFrameRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparseFrameRecorder.swift; sourceTree = "<group>"; };
+		FC7300000000000000000002 /* DenseFrameRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DenseFrameRecorder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -84,6 +86,7 @@
 				ACEF94B42820AD2300776A9D /* RoomCaptureViewController.swift */,
 				FC7100000000000000000002 /* ScanArchive.swift */,
 				FC7200000000000000000002 /* SparseFrameRecorder.swift */,
+				FC7300000000000000000002 /* DenseFrameRecorder.swift */,
 				ACEF94B62820AD2300776A9D /* Main.storyboard */,
 				71B6638328D0CABC00635A15 /* UnsupportedDevice.storyboard */,
 				ACEF94B92820AD2400776A9D /* Assets.xcassets */,
@@ -178,6 +181,7 @@
 				ACEF94B52820AD2300776A9D /* RoomCaptureViewController.swift in Sources */,
 				FC7100000000000000000001 /* ScanArchive.swift in Sources */,
 				FC7200000000000000000001 /* SparseFrameRecorder.swift in Sources */,
+				FC7300000000000000000001 /* DenseFrameRecorder.swift in Sources */,
 				ACEF94B12820AD2300776A9D /* AppDelegate.swift in Sources */,
 				ACEF94B32820AD2300776A9D /* SceneDelegate.swift in Sources */,
 				ACEF94C62820AF6600776A9D /* OnboardingViewController.swift in Sources */,
@@ -340,7 +344,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = NAJJHVC693;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -375,7 +379,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = NAJJHVC693;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = YES;

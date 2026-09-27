@@ -5,7 +5,8 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 def load_frames(folder):
-    return json.loads((folder/'Frames.json').read_text())['frames']
+    index = folder/('Frames.json' if (folder/'Frames.json').exists() else 'DenseFrames.json')
+    return json.loads(index.read_text())['frames']
 
 def matrix(f,key,n):
     return np.array(f[key]).reshape(n,n,order='F')

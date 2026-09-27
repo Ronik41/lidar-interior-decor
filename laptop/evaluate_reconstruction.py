@@ -9,9 +9,12 @@ from skimage.metrics import structural_similarity
 from assess_coverage import load_frames,matrix
 from reconstruct_room import split_frames,extrinsic,read_depth
 from pose_overrides import apply_poses
+from capture_selection import load_selection, selected_split
 
 def render_mesh(folder,out):
-    start=time.monotonic();poses=out/'pose-refinement.json';frames=apply_poses(folder,load_frames(folder),poses if poses.exists() else None);train,test=split_frames(frames)
+    start=time.monotonic();poses=out/'pose-refinement.json';frames=apply_poses(folder,load_frames(folder),poses if poses.exists() else None)
+    selection=out/'frame-selection.json'
+    train,test=selected_split(folder,frames,load_selection(selection)) if selection.exists() else split_frames(frames)
     mesh=o3d.io.read_triangle_mesh(str(out/'colored-mesh.ply'));verts=np.asarray(mesh.vertices);tri=np.asarray(mesh.triangles)
     best=np.load(out/'texture-assignment.npz')['best_frame'];scene=o3d.t.geometry.RaycastingScene();scene.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(mesh))
     render_dir=out/'mesh-held-out';render_dir.mkdir(exist_ok=True)

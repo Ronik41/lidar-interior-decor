@@ -20,6 +20,7 @@ from PIL import Image, ImageDraw
 from assess_coverage import load_frames, matrix
 from reconstruct_room import split_frames, read_depth, extrinsic
 from import_scan import validate
+from capture_selection import load_selection, selected_split
 
 
 PROTOCOL = dict(
@@ -85,7 +86,11 @@ def track_graph(tracks, frames, positions):
     cells = [tuple(map(int,c)) for c in cells]; cell_counts = Counter(cells)
     missing_cells = [list(cell) for cell, count in cell_counts.items() if count >= PROTOCOL['min_spatial_cell_frames'] and not any(cells[i] == cell for i in main)]
     missing_blocks = sorted(set(temporal.tolist())-set(temporal[list(main)].tolist()))
-    revisit = [(a, b) for a, b in edges if a in main and b in main and abs(a-b) >= PROTOCOL['revisit_min_gap_frames']]
+    def is_revisit(a,b):
+        if 'revisit_min_gap_seconds' in PROTOCOL:
+            return abs(frames[a]['timestamp_seconds']-frames[b]['timestamp_seconds']) >= PROTOCOL['revisit_min_gap_seconds']
+        return abs(a-b) >= PROTOCOL['revisit_min_gap_frames']
+    revisit = [(a, b) for a, b in edges if a in main and b in main and is_revisit(a,b)]
     bridge_pairs = bridges(adjacency, main)
     supported = int((observations >= PROTOCOL['min_camera_track_observations']).sum())
     gates = dict(
@@ -165,7 +170,9 @@ def report_cached(source, baseline, output):
 def worker(source, baseline, output):
     start = time.monotonic(); cv2.setNumThreads(2); cv2.setRNGSeed(PROTOCOL['seed'])
     validate(source)
-    all_frames = load_frames(source); frames, evaluation = split_frames(all_frames)
+    all_frames = load_frames(source)
+    selection = baseline/'frame-selection.json'
+    frames,evaluation = selected_split(source,all_frames,load_selection(selection)) if selection.exists() else split_frames(all_frames)
     split = json.loads((baseline/'split.json').read_text())
     if [f['rgb_file'] for f in frames] != split['train'] or [f['rgb_file'] for f in evaluation] != split['held_out']:
         raise ValueError('Frozen split does not match source')
@@ -179,18 +186,28 @@ def worker(source, baseline, output):
         gray=np.asarray(Image.open(source/f['rgb_file']).convert('L').resize((width,height),Image.Resampling.LANCZOS))
         kp,desc=detector.detectAndCompute(gray,None); uv=np.asarray([k.pt for k in kp],dtype='f4').reshape(-1,2)
         k=matrix(f,'intrinsics_column_major',3).copy();k[0]*=width/f['image_width'];k[1]*=height/f['image_height'];K.append(k)
-        dep=read_depth(source,f);pix=np.rint(uv*[f['depth_width']/width,f['depth_height']/height]).astype(int)
-        pix=np.clip(pix,[0,0],[f['depth_width']-1,f['depth_height']-1]);depth=dep[pix[:,1],pix[:,0]]
+        if f.get('confidence_available',True) and f.get('depth_available',True):
+            dep=read_depth(source,f);pix=np.rint(uv*[f['depth_width']/width,f['depth_height']/height]).astype(int)
+            pix=np.clip(pix,[0,0],[f['depth_width']-1,f['depth_height']-1]);depth=dep[pix[:,1],pix[:,0]]
+        else:depth=np.zeros(len(uv))
         world=(np.column_stack([uv,np.ones(len(uv))])@np.linalg.inv(k).T*depth[:,None]-E[i,:3,3])@E[i,:3,:3]
         features.append(dict(uv=uv,desc=desc,depth=depth,world=world,height=height))
         if i%40==0: print('Training features',i+1,'/',len(frames),flush=True)
     K=np.array(K)
     candidates={}
+    times=np.array([f['timestamp_seconds'] for f in frames])
     for i in range(len(frames)):
-        for offset in PROTOCOL['temporal_offsets']:
-            if i+offset<len(frames): candidates[(i,i+offset)]='temporal'
+        if 'temporal_offsets_seconds' in PROTOCOL:
+            if i+1<len(frames):candidates[(i,i+1)]='adjacent'
+            for offset in PROTOCOL['temporal_offsets_seconds']:
+                j=int(np.argmin(np.abs(times-times[i]-offset)))
+                if j>i and abs(times[j]-times[i]-offset)<=.25:candidates[(i,j)]='temporal'
+        else:
+            for offset in PROTOCOL['temporal_offsets']:
+                if i+offset<len(frames): candidates[(i,i+offset)]='temporal'
         distance=np.linalg.norm(positions-positions[i],axis=1);dot=directions@directions[i]
-        valid=np.flatnonzero((np.abs(np.arange(len(frames))-i)>=PROTOCOL['revisit_min_gap_frames']) & (distance<PROTOCOL['revisit_max_distance_m']) & (dot>PROTOCOL['revisit_min_view_dot']))
+        revisit_gap=(np.abs(times-times[i])>=PROTOCOL['revisit_min_gap_seconds']) if 'revisit_min_gap_seconds' in PROTOCOL else (np.abs(np.arange(len(frames))-i)>=PROTOCOL['revisit_min_gap_frames'])
+        valid=np.flatnonzero(revisit_gap & (distance<PROTOCOL['revisit_max_distance_m']) & (dot>PROTOCOL['revisit_min_view_dot']))
         score=distance[valid]+(1-dot[valid])
         for j in valid[np.argsort(score)[:PROTOCOL['revisit_neighbors']]]:candidates[tuple(sorted((i,int(j))))]='revisit'
     matcher=cv2.BFMatcher(cv2.NORM_L2);rows=[];links=[]
@@ -259,7 +276,8 @@ def worker(source, baseline, output):
             obs_camera.append(c);obs_track.append(t);obs_uv.append(features[c]['uv'][k]);obs_depth.append(features[c]['depth'][k])
     np.savez_compressed(output/'tracks.npz',camera=np.array(obs_camera),track=np.array(obs_track),uv=np.array(obs_uv),depth=np.array(obs_depth),points=np.array([t['point'] for t in tracks]),intrinsics=K,extrinsics=E,positions=positions)
     (output/'tracks.json').write_text(json.dumps(tracks))
-    report=dict(protocol=PROTOCOL,source_scan_id=split['source_scan_id'],index_sha256=hashlib.sha256((source/'Frames.json').read_bytes()).hexdigest(),
+    index=source/('DenseFrames.json' if selection.exists() else 'Frames.json')
+    report=dict(protocol=PROTOCOL,source_scan_id=split['source_scan_id'],index_sha256=hashlib.sha256(index.read_bytes()).hexdigest(),
                 frame_names=[f['rgb_file'] for f in frames],reserved_frames_never_opened_for_features=excluded,
                 training_cameras=len(frames),candidate_pairs=len(rows),accepted_pairs=sum(r['accepted'] for r in rows),
                 feature_components=len(groups),rejected_tracks=dict(rejected),reliable_tracks=len(accepted),bundle_tracks=len(tracks),observations=len(obs_camera),

@@ -65,6 +65,13 @@ The importer verifies every declared file's SHA-256, checks the JSON, USDZ conta
 
 ## Optional sparse RGB + LiDAR capture
 
+The separate opt-in **Dense RGB experiment · 8 Hz** is documented in
+[DENSE_CAPTURE_STATUS.md](DENSE_CAPTURE_STATUS.md). It preserves both existing
+capture modes and adds exact per-frame metadata, optional depth, capture telemetry,
+and a fixed same-capture 2 Hz versus denser reconstruction protocol. Physical dense
+reliability and the new full-pass comparison must be verified before claiming a
+quality improvement; see that status document for current device results.
+
 On the phone, choose **Sparse RGB + depth experiment** instead of **Start Scanning**. It samples RoomPlan's existing `ARSession.currentFrame` every two seconds, at most 20 sets over 45 seconds. **Only frame sampling stops at that limit; ordinary scanning continues until you tap Done.** The command-line debug probe used for validation separately stops the whole scan at 40 seconds and saves automatically; normal app use does not have that timeout.
 
 Each accepted sample takes the RGB image, `sceneDepth`, depth-confidence map, timestamp, camera-to-world pose, and camera intrinsics from the **same ARFrame**. A background serial writer holds at most one frame. Non-normal tracking, absent depth/confidence, duplicate timestamps, or a busy writer cause skips. Serious/critical heat or an encoding pass over 750 ms stops sampling. The experiment never runs another ARSession, changes RoomPlan's configuration/frame semantics, or replaces its ARSession delegate. Optional sidecar export failures fall back to the working core scan package.

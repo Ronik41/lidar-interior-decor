@@ -15,10 +15,12 @@ import AVFoundation
 class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, RoomCaptureSessionDelegate {
     var captureSparseFrames = false
     var captureRoomPass = false
+    var captureDenseFrames = false
     private let coverageLabel = UILabel()
     private var roomPassEndTimer: Timer?
     var runBoundedProbe = false
     private var sparseRecorder: SparseFrameRecorder?
+    private var denseRecorder: DenseFrameRecorder?
     private var probeTimer: Timer?
     private var probeEndTimer: Timer?
     
@@ -34,6 +36,7 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
     private var hasReportedCaptureError = false
     private var exportedArchive: URL?
     private var startupDiagnosticTimer: Timer?
+    private var captureStartedUptime = 0.0
     
     private var roomCaptureView: RoomCaptureView!
     private var roomCaptureSessionConfig: RoomCaptureSession.Configuration = RoomCaptureSession.Configuration()
@@ -50,23 +53,33 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         setupRoomCaptureView()
         activityIndicator?.stopAnimating()
         if captureRoomPass {
-            coverageLabel.numberOfLines = 6
+            coverageLabel.numberOfLines = 0
             coverageLabel.textAlignment = .center
-            coverageLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+            coverageLabel.font = .systemFont(ofSize: captureDenseFrames ? 13 : 14, weight: .semibold)
             coverageLabel.textColor = .white
             coverageLabel.backgroundColor = UIColor.black.withAlphaComponent(0.78)
             coverageLabel.layer.cornerRadius = 8
             coverageLabel.clipsToBounds = true
-            coverageLabel.text = "3-minute room pass · preparing camera…"
+            coverageLabel.text = "\(captureVersionLabel)\nPreparing camera…"
+            coverageLabel.accessibilityIdentifier = "capture-guidance-hud"
             coverageLabel.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(coverageLabel)
             NSLayoutConstraint.activate([
                 coverageLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
                 coverageLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
                 coverageLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
-                coverageLabel.heightAnchor.constraint(equalToConstant: 132)
+                coverageLabel.heightAnchor.constraint(equalToConstant: captureDenseFrames ? 200 : 165)
             ])
         }
+    }
+
+    private var captureVersionLabel: String {
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") ?? "?"
+        if captureDenseFrames {
+            return "Build \(build) · \(DenseFrameRecorder.captureVersion)\n\(DenseFrameRecorder.guidanceVersion) · \(runBoundedProbe ? "40s test" : "3-minute pass") · target 8 Hz"
+        }
+        let mode = runBoundedProbe ? "40s HUD test · auto-stop" : "3-minute pass · 2 Hz"
+        return "Build \(build) · station-pass-v2\n\(mode)"
     }
     
     private func setupRoomCaptureView() {
@@ -124,18 +137,38 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         scanEndedAt = nil
         referenceImage = nil
         referenceMetadata = nil
+        captureStartedUptime = ProcessInfo.processInfo.systemUptime
         roomCaptureView?.captureSession.run(configuration: roomCaptureSessionConfig)
         if captureSparseFrames {
             do {
                 sparseRecorder = try SparseFrameRecorder(profile: captureRoomPass ? .roomPass : .sparse)
-                sparseRecorder?.onProgress = { [weak self] text in self?.coverageLabel.text = text }
+                sparseRecorder?.onProgress = { [weak self] text in
+                    guard let self else { return }
+                    let remaining = Int(ceil(max(0,40-(ProcessInfo.processInfo.systemUptime-self.captureStartedUptime))))
+                    let display = self.runBoundedProbe ? text.replacingOccurrences(of: #"^\d+s left"#, with: "\(remaining)s left", options: .regularExpression) : text
+                    self.coverageLabel.text = "\(self.captureVersionLabel)\n\(display)"
+                }
                 sparseRecorder?.start(session: roomCaptureView.captureSession.arSession)
                 recordDiagnostic(captureRoomPass ? "Room pass enabled: 2fps, 180 seconds, last 30 seconds held out" : "Sparse experiment enabled: every 2 seconds, at most 20 frames / 45 seconds")
             } catch {
                 recordDiagnostic("Sparse experiment unavailable; RoomPlan continues: \(error.localizedDescription)")
             }
         }
-        if captureRoomPass {
+        if captureDenseFrames {
+            do {
+                denseRecorder = try DenseFrameRecorder(duration: runBoundedProbe ? 40 : 180)
+                denseRecorder?.onProgress = { [weak self] text in
+                    guard let self else { return }
+                    self.coverageLabel.text = "\(self.captureVersionLabel)\n\(text)"
+                }
+                denseRecorder?.start(session: roomCaptureView.captureSession.arSession)
+                recordDiagnostic("Dense RGB experiment enabled: target 8fps image sequence; optional depth/confidence; last 30s reserved on full pass")
+            } catch {
+                coverageLabel.text = "Dense recording unavailable\n\(error.localizedDescription)\nRoomPlan continues."
+                recordDiagnostic("Dense capture unavailable; RoomPlan continues: \(error.localizedDescription)")
+            }
+        }
+        if captureRoomPass && !runBoundedProbe {
             probeTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.recordDiagnostic("Room pass") }
             roomPassEndTimer = Timer.scheduledTimer(withTimeInterval: 180, repeats: false) { [weak self] _ in self?.stopSession() }
         }
@@ -159,6 +192,7 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         probeEndTimer?.invalidate()
         roomPassEndTimer?.invalidate()
         sparseRecorder?.stop(reason: isDiscarding ? "scan discarded" : "scan completed")
+        denseRecorder?.stop(reason: isDiscarding ? "scan discarded" : "scan completed")
         guard isScanning else { return }
         isScanning = false
         UIApplication.shared.isIdleTimerDisabled = false
@@ -226,6 +260,7 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         probeEndTimer?.invalidate()
         roomPassEndTimer?.invalidate()
         sparseRecorder?.stop(reason: "RoomPlan capture error: \(error.localizedDescription)")
+        denseRecorder?.stop(reason: "RoomPlan capture error: \(error.localizedDescription)")
         hasReportedCaptureError = true
         isScanning = false
         roomCaptureView.captureSession.stop()
@@ -255,7 +290,8 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         let frameSummary = frame.map {
             "tracking=\($0.camera.trackingState), image=\(CVPixelBufferGetWidth($0.capturedImage))x\(CVPixelBufferGetHeight($0.capturedImage)), features=\($0.rawFeaturePoints?.points.count ?? 0), depth=\($0.sceneDepth != nil), timestamp=\($0.timestamp)"
         } ?? "no AR frame"
-        let line = "\(ISO8601DateFormatter().string(from: Date())) \(event); cameraAuthorization=\(AVCaptureDevice.authorizationStatus(for: .video).rawValue); screenCaptured=\(UIScreen.main.isCaptured); thermal=\(ProcessInfo.processInfo.thermalState.rawValue); \(frameSummary)\n"
+        let hud = captureRoomPass ? "; hudAttached=\(coverageLabel.window != nil), hudHidden=\(coverageLabel.isHidden), hudSize=\(coverageLabel.bounds.size), hudText=\((coverageLabel.text ?? "").replacingOccurrences(of: "\n", with: " | "))" : ""
+        let line = "\(ISO8601DateFormatter().string(from: Date())) \(event); build=\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") ?? "?"); cameraAuthorization=\(AVCaptureDevice.authorizationStatus(for: .video).rawValue); screenCaptured=\(UIScreen.main.isCaptured); thermal=\(ProcessInfo.processInfo.thermalState.rawValue); \(frameSummary)\(hud)\n"
         print(line, terminator: "")
         let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ScanDiagnostics.txt")
@@ -301,6 +337,8 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         let systemVersion = UIDevice.current.systemVersion
         let recorder = sparseRecorder
         let sparseSummary = recorder?.exportSummary()
+        let dense = denseRecorder
+        let denseSummary = dense?.exportSummary()
         // Keep the UI responsive while RoomPlan exports and the ZIP is written.
         DispatchQueue.global(qos: .userInitiated).async {
             defer { try? FileManager.default.removeItem(at: destinationFolderURL) }
@@ -332,6 +370,19 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
                     }
                 }
 
+                var denseFiles: [String] = []
+                var denseNote = "Not requested."
+                if let dense, let denseSummary {
+                    do {
+                        denseFiles = try dense.copyCompleted(to: destinationFolderURL, summary: denseSummary)
+                        denseNote = "Opt-in image sequence with exact ARFrame metadata; see DenseFrames.json for actual rate, drops and limits."
+                    } catch {
+                        denseNote = "Dense sidecar unavailable: \(error.localizedDescription). RoomPlan payload preserved."
+                        let leftovers = (try? FileManager.default.contentsOfDirectory(at: destinationFolderURL, includingPropertiesForKeys: nil)) ?? []
+                        for file in leftovers where file.lastPathComponent.hasPrefix("Dense-") || file.lastPathComponent == "DenseFrames.json" { try? FileManager.default.removeItem(at: file) }
+                    }
+                }
+
                 var hashes: [String: String] = [:]
                 for file in files {
                     let data = try Data(contentsOf: destinationFolderURL.appending(path: file))
@@ -358,6 +409,15 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
                 ]
                 if recorder != nil { manifest["sparse_capture_note"] = sparseNote }
                 if !sparseFiles.isEmpty { manifest["sparse_frames"] = ["schema_version": 1, "index_file": "Frames.json", "sha256": sparseHashes] }
+                if dense != nil { manifest["dense_capture_note"] = denseNote }
+                if !denseFiles.isEmpty {
+                    var denseHashes: [String: String] = [:]
+                    for name in denseFiles {
+                        let data = try Data(contentsOf: destinationFolderURL.appendingPathComponent(name))
+                        denseHashes[name] = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+                    }
+                    manifest["dense_frames"] = ["schema_version": 1, "index_file": "DenseFrames.json", "sha256": denseHashes]
+                }
                 let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
                 try manifestData.write(to: destinationFolderURL.appending(path: "manifest.json"))
 
@@ -374,7 +434,7 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
                     self.finishExport()
                     self.recordDiagnostic("Saved package: \(archiveURL.lastPathComponent)")
                     if self.captureRoomPass {
-                        self.coverageLabel.text = "Room saved · RGB-D + RoomPlan\nYou can close this scan. Keep the package for transfer."
+                        self.coverageLabel.text = "Room saved · \(self.captureDenseFrames ? "dense RGB" : "RGB-D") + RoomPlan\nYou can close this scan. Keep the package for transfer."
                         self.doneButton?.title = "Room saved"
                         return
                     }

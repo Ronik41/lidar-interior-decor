@@ -11,6 +11,7 @@ from scipy.ndimage import maximum_filter, minimum_filter
 from assess_coverage import load_frames, matrix
 from import_scan import validate
 from pose_overrides import apply_poses
+from capture_selection import load_selection, selected_split
 
 CV_FROM_AR = np.diag([1., -1., -1., 1.])
 
@@ -93,14 +94,19 @@ def texture_mesh(folder,out,train,mesh):
     np.savez_compressed(out/'texture-assignment.npz',best_frame=best)
     return {'triangles_with_photo':int((best>=0).sum()),'triangles_unknown_color':int((best<0).sum()),'source_photos_used':len(images)}
 
-def reconstruct(folder,out,voxel=.025,poses=None):
+def reconstruct(folder,out,voxel=.025,poses=None,selection=None):
     if (out/'colored-mesh.ply').exists():raise ValueError('Reconstruction already exists; use a new output directory to preserve the baseline')
-    start=time.monotonic();manifest=validate(folder);frames=apply_poses(folder,load_frames(folder),poses);train,test=split_frames(frames)
+    start=time.monotonic();manifest=validate(folder);frames=apply_poses(folder,load_frames(folder),poses)
+    chosen=load_selection(selection)
+    if chosen and poses:raise ValueError('Dense ablation freezes the original ARKit poses')
+    train,test=selected_split(folder,frames,chosen) if chosen else split_frames(frames)
     out.mkdir(parents=True,exist_ok=True)
+    if chosen:(out/'frame-selection.json').write_text(json.dumps(chosen,indent=2))
     if poses:
         target=out/'pose-refinement.json'
         if Path(poses).resolve()!=target.resolve():target.write_bytes(Path(poses).read_bytes())
-    split={'source_scan_id':manifest['scan_id'],'index_sha256':hashlib.sha256((folder/'Frames.json').read_bytes()).hexdigest(),'train':[f['rgb_file'] for f in train],'held_out':[f['rgb_file'] for f in test],'excluded_held_out_frames':[f['rgb_file'] for f in frames if f.get('capture_phase')=='held_out'],'policy':'Held-out RGB and depth excluded from mesh, texture, seed, and splat training; all captures in final test phase excluded even if not selected for evaluation.'}
+    index=folder/('DenseFrames.json' if chosen else 'Frames.json')
+    split={'source_scan_id':manifest['scan_id'],'index_sha256':hashlib.sha256(index.read_bytes()).hexdigest(),'train':[f['rgb_file'] for f in train],'held_out':[f['rgb_file'] for f in test],'excluded_held_out_frames':[f['rgb_file'] for f in frames if f.get('capture_phase')=='held_out'],'policy':'Held-out RGB and depth excluded from mesh, texture, seed, and splat training; all captures in final test phase excluded even if not selected for evaluation.'}
     (out/'split.json').write_text(json.dumps(split,indent=2))
     c=o3d.core
     volume=o3d.t.geometry.VoxelBlockGrid(attr_names=('tsdf','weight','color'),attr_dtypes=(c.float32,c.float32,c.float32),attr_channels=((1),(1),(3)),voxel_size=voxel,block_resolution=16,block_count=3000,device=c.Device('CPU:0'))

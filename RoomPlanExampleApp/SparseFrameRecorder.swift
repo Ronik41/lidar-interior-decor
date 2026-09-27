@@ -168,7 +168,7 @@ final class SparseFrameRecorder {
     }
 
     private func summaryFields() -> [String: Any] {
-        ["schema_version": 1, "started_at": ISO8601DateFormatter().string(from: started),
+        ["schema_version": 1, "app_build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") ?? "unknown", "started_at": ISO8601DateFormatter().string(from: started),
          "ended_at": ISO8601DateFormatter().string(from: ended ?? Date()), "status": status,
          "attempts": attempts, "admitted": admitted, "skipped": skipped, "thermal_guard": thermalStop,
          "maximum_frames": maximumFrames, "interval_seconds": interval,
