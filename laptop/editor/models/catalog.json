@@ -14,10 +14,114 @@
     ],
     "model_offset_m": [
       0.000743411,
-      6.977785e-05,
+      0.00006977785,
       -0.0084076295
     ],
-    "dimension_basis": "Authored glTF metre-scale bounds (W \u00d7 H \u00d7 D), unscaled. Not a measured retail product.",
-    "description": "Detailed upholstered lounge chair with curved cushions, timber frame and metal fittings. A separate proposal, never captured furniture."
+    "dimension_basis": "Authored glTF metre-scale bounds (W × H × D), unscaled. Not a measured retail product.",
+    "description": "Detailed upholstered lounge chair with curved cushions, timber frame and metal fittings. A separate proposal, never captured furniture.",
+    "anchor_type": "floor",
+    "collision": {
+      "type": "box",
+      "dimensions_m": [
+        0.826557978,
+        0.68624707785,
+        0.570265459
+      ]
+    }
+  },
+  {
+    "id": "side-table-v1",
+    "name": "Walnut side table",
+    "author": "Original procedural artwork for this project",
+    "license": "CC0-1.0",
+    "source_url": "/models/ORIGINAL-ASSETS.md",
+    "model_url": "/models/side-table-v1/model.glb",
+    "sha256": "4bbe0f36b0441b1d15443d1d5719011b4ab2f4056b9f6dd4a00ec464ac2c546b",
+    "dimensions_m": [
+      0.5799999833106995,
+      0.5824999821186065,
+      0.5199999809265137
+    ],
+    "model_offset_m": [
+      0,
+      1.19209286886246e-9,
+      0
+    ],
+    "dimension_basis": "Authored metric design prop. Not a measured or purchasable product.",
+    "description": "Original open-frame side table with a lower shelf.",
+    "anchor_type": "floor",
+    "collision": {
+      "type": "box",
+      "dimensions_m": [
+        0.5799999833106995,
+        0.5824999821186065,
+        0.5199999809265137
+      ]
+    },
+    "surface": {
+      "height_m": 0.5825,
+      "width_m": 0.54,
+      "depth_m": 0.48
+    }
+  },
+  {
+    "id": "framed-painting-v1",
+    "name": "Quiet hills · framed painting",
+    "author": "Original procedural artwork for this project",
+    "license": "CC0-1.0",
+    "source_url": "/models/ORIGINAL-ASSETS.md",
+    "model_url": "/models/framed-painting-v1/model.glb",
+    "sha256": "3730f8a079bf33cadb4416159773d81ecab1ae965b71c8e8d70a982c8c9efc86",
+    "dimensions_m": [
+      0.7599999904632568,
+      0.5600000035762787,
+      0.046000001952052116
+    ],
+    "model_offset_m": [
+      0,
+      1.19209286886246e-9,
+      -0.01100000087171793
+    ],
+    "dimension_basis": "Authored metric design prop. Not a measured or purchasable product.",
+    "description": "Original geometric landscape in a timber frame. Front faces local +Z.",
+    "anchor_type": "wall",
+    "collision": {
+      "type": "box",
+      "dimensions_m": [
+        0.7599999904632568,
+        0.5600000035762787,
+        0.046000001952052116
+      ]
+    }
+  },
+  {
+    "id": "fruit-bowl-v1",
+    "name": "Ceramic bowl & fruit",
+    "author": "Original procedural artwork for this project",
+    "license": "CC0-1.0",
+    "source_url": "/models/ORIGINAL-ASSETS.md",
+    "model_url": "/models/fruit-bowl-v1/model.glb",
+    "sha256": "8115b5127b1c8a89585dff8ef23c8e6deb803a5c1defba08b58b9fc0ef30eb61",
+    "dimensions_m": [
+      0.3400000035762787,
+      0.20559999346733093,
+      0.3400000035762787
+    ],
+    "model_offset_m": [
+      0,
+      0,
+      0
+    ],
+    "dimension_basis": "Authored metric design prop. Not a measured or purchasable product.",
+    "description": "Original ceramic bowl with four stylized apples and citrus.",
+    "anchor_type": "tabletop",
+    "collision": {
+      "type": "box",
+      "dimensions_m": [
+        0.3400000035762787,
+        0.20559999346733093,
+        0.3400000035762787
+      ]
+    }
   }
 ]

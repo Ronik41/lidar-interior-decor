@@ -11,10 +11,10 @@ class ReviewTests(unittest.TestCase):
     write_room = fixtures.DesignInputTests.write_room
     resolved = fixtures.DesignInputTests.resolved
     def test_schema_one_upgrade_keeps_immutable_parent(self):
-        old=self.store.new();old['schema_version']=1;old.pop('proposals');old.pop('reviews');old.pop('reference_observations');old['revision']=1
+        old=self.store.new();old.pop('scene_id');old.pop('navigation_overrides');old['schema_version']=1;old.pop('proposals');old.pop('reviews');old.pop('reference_observations');old['revision']=1
         self.store.output.mkdir(parents=True);path=self.store.output/'revision-0001.design.json';path.write_text(json.dumps(old))
         before=path.read_bytes();loaded=self.store.load(path);new=self.store.payload(loaded,path.name)['document']
-        self.assertEqual(new['schema_version'],3)
+        self.assertEqual(new['schema_version'],4)
         new['elements'][0]['overrides']['color']={'hex':'#445566','origin':'user'}
         saved,name=self.store.save(new,path.name)
         self.assertEqual(saved['parent']['file'],path.name);self.assertEqual(path.read_bytes(),before)

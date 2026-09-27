@@ -84,11 +84,11 @@ class FurnitureTests(unittest.TestCase):
         self.assertEqual(before,{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in self.scan.iterdir()})
 
     def test_schema_two_loads_and_upgrades_without_rewriting(self):
-        old=self.store.new();old['schema_version']=2;old.pop('proposals')
+        old=self.store.new();old.pop('scene_id');old.pop('navigation_overrides');old['schema_version']=2;old.pop('proposals')
         self.store.output.mkdir(parents=True);path=self.store.output/'revision-0001.design.json'
         old['revision']=1;path.write_text(json.dumps(old));before=path.read_bytes()
         loaded=self.store.payload(self.store.load(path),path.name)
-        self.assertEqual(loaded['document']['schema_version'],3)
+        self.assertEqual(loaded['document']['schema_version'],4)
         self.assertEqual(loaded['proposals'],[])
         self.assertEqual(path.read_bytes(),before)
 

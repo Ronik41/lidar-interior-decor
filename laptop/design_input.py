@@ -12,6 +12,7 @@ from pathlib import Path
 from import_scan import file_hash, read_object, validate
 from review_geometry import enrich, review_queue, validate_observations
 from furniture import CATALOG, floor_anchors, validate_proposals, resolve_proposals
+from scene_geometry import build_scene, validate_navigation
 
 COLLECTIONS = ("walls", "doors", "openings", "windows", "floors", "objects")
 PREFIX = dict(zip(COLLECTIONS, ("W", "D", "O", "G", "F", "")))
@@ -98,6 +99,7 @@ class DesignStore:
         self.observations = {}
         self.original_elements = [self.resolved(e, {"overrides": {}, "decision": "unsure" if e['source']['collection'] == 'objects' else None}) for e in self.elements]
         self.floors = floor_anchors(self.original_elements)
+        self.scene = build_scene(self.source["scan_id"], self.original_elements, self.floors, self.rotation)
         observations_path = self.output / "reference-observations.json"
         if observations_path.exists():
             evidence = read_object(observations_path)
@@ -112,11 +114,11 @@ class DesignStore:
 
     def new(self):
         return {
-            "format": FORMAT, "schema_version": 3, "revision": 0,
+            "format": FORMAT, "schema_version": 4, "revision": 0,
             "saved_at": None, "parent": None, "source": copy.deepcopy(self.source),
             "coordinates": COORDINATES, "plan_rotation_radians": self.rotation,
             "reference_observations": copy.deepcopy(self.observations), "reviews": {},
-            "proposals": [],
+            "proposals": [], "scene_id": self.source["scan_id"], "navigation_overrides": {},
             "elements": [{"source": copy.deepcopy(e["source"]), "overrides": {},
                           "decision": "unsure" if e["source"]["collection"] == "objects" else None}
                          for e in self.elements],
@@ -124,6 +126,9 @@ class DesignStore:
 
     def validate_document(self, doc):
         expected = self.new()
+        if isinstance(doc, dict) and type(doc.get("schema_version")) is int and doc["schema_version"] in (1,2,3):
+            expected.pop("scene_id"); expected.pop("navigation_overrides")
+            expected["schema_version"] = doc["schema_version"]
         if isinstance(doc, dict) and type(doc.get("schema_version")) is int and doc['schema_version'] in (1, 2):
             expected.pop('proposals')
             expected['schema_version'] = doc['schema_version']
@@ -186,8 +191,11 @@ class DesignStore:
                            or value not in ("confirmed", "corrected", "excluded", "skipped")
                            for key, value in reviews.items())):
                 raise ValueError("Invalid review resolutions")
-        if doc['schema_version'] == 3:
-            validate_proposals(doc['proposals'], self.floors, [e['source']['identifier'] for e in self.elements])
+        if doc['schema_version'] >= 3:
+            validate_proposals(doc['proposals'], self.floors, [e['source']['identifier'] for e in self.elements], self.scene)
+        if doc["schema_version"] == 4:
+            if doc["scene_id"] != self.source["scan_id"]: raise ValueError("Placements belong to another scene")
+            validate_navigation(doc["navigation_overrides"], self.scene)
         return doc
 
     def upgrade(self, doc):
@@ -197,6 +205,8 @@ class DesignStore:
             doc.update(schema_version=2, reference_observations=copy.deepcopy(self.observations), reviews={})
         if doc['schema_version'] == 2:
             doc.update(schema_version=3, proposals=[])
+        if doc['schema_version'] == 3:
+            doc.update(schema_version=4, scene_id=self.source['scan_id'], navigation_overrides={})
         return doc
 
     def project(self, matrix, point):
@@ -277,7 +287,8 @@ class DesignStore:
         bounds = [min(p[0] for p in points), min(p[1] for p in points),
                   max(p[0] for p in points), max(p[1] for p in points)] if points else [-1, -1, 1, 1]
         return {"document": doc, "elements": elements, "bounds": bounds,
-                "proposals": resolve_proposals(doc['proposals'], self.floors, self.original_elements, self.rotation),
+                "proposals": resolve_proposals(doc['proposals'], self.floors, self.original_elements, self.rotation, self.scene),
+                "scene": copy.deepcopy(self.scene),
                 "furniture_catalog": copy.deepcopy(CATALOG), "placement_floors": self.floors,
                 "review_queue": review_queue(elements, doc["reviews"]),
                 "reference": dict(read_object(self.scan / "Reference.json"), url="/reference.jpg") if self.manifest["rgb_reference_available"] else None,

@@ -16,7 +16,7 @@
   <div id="message" role="status" aria-live="polite"></div>
   <main>
     <aside class="inventory">
-      <section class="proposal-section"><div class="section-head"><h2>Proposed furniture</h2><span class="count" id="proposal-count">0</span></div><div id="furniture-catalog"></div><p id="proposal-model-status" class="warning" role="status" hidden></p><div id="proposals"></div></section>
+      <section class="proposal-section"><div class="section-head"><h2>Local decor library</h2><span class="count" id="proposal-count">0</span></div><div id="furniture-catalog"></div><p id="proposal-model-status" class="warning" role="status" hidden></p><div id="proposals"></div></section>
       <section class="review-section"><div class="section-head"><h2>Needs review</h2><span class="count" id="review-count"></span></div><p class="muted">Only uncertain categories and important conflicts.</p><div id="review-queue"></div><button id="show-skipped" class="quiet">Show skipped</button></section>
       <div class="section-head"><h2>Room elements</h2><span id="element-count" class="count"></span></div>
       <p class="muted">One selection across 3D, plan, and inspector.</p>
@@ -28,9 +28,10 @@
       <div class="plan-heading"><div><p class="eyebrow" id="view-eyebrow">3D ROOM · METERS</p><h2 id="view-title">A feel for the space</h2></div><div class="view-tabs" role="group" aria-label="View mode"><button id="view-3d" class="active" aria-pressed="true">3D room</button><button id="view-2d" aria-pressed="false">2D plan</button></div></div>
       <div id="capture-tools" hidden>
         <div class="capture-line"><strong>As scanned</strong><select id="scan-layer" aria-label="3D layer"><option value="mesh">Photographic RGB-D mesh</option><option value="splat">Gaussian splat candidate</option><option value="roomplan">Editable RoomPlan</option></select><label><input id="roomplan-overlay" type="checkbox"> RoomPlan overlay</label></div>
-        <div class="capture-line"><select id="capture-viewpoint" aria-label="Walkthrough viewpoint"></select><button id="go-viewpoint">Go to view</button><button id="compare-splats" hidden>Switch to Scaniverse</button><button id="walk-mode" class="active">Walk</button><button id="orbit-mode">Orbit</button><button id="expand-room" aria-pressed="false">Expand 3D</button></div>
+        <div class="capture-line"><select id="capture-viewpoint" aria-label="Walkthrough viewpoint"></select><button id="go-viewpoint">Go to view</button><button id="compare-splats" hidden>Switch to Scaniverse</button><button id="expand-room" aria-pressed="false">Expand 3D</button></div>
         <p id="capture-provenance"></p>
       </div>
+      <div id="navigation-tools"><button id="walk-mode">Walk</button><button id="orbit-mode" class="active">Orbit</button><label><input id="collision-debug" type="checkbox"> Collision debug</label><span>1.60 m eye · 22 cm radius</span><output id="walk-position"></output><small>Green: allowed camera centres (8 cm samples) · amber: walls · violet: captured boxes · cyan: props</small></div>
       <div id="scene-tools"><label><input type="checkbox" id="cutaway" checked> Cutaway walls</label><label><input type="checkbox" id="show-excluded" checked> Excluded outlines</label><button id="focus-3d">Focus selected</button><button id="fit-3d">Fit room</button></div>
       <div id="placement-bar" hidden><span id="placement-instruction"></span><button id="cancel-placement">Cancel · Esc</button></div>
       <div id="scene-wrap"><div class="scene-caption">Bounding-box furniture · drag to orbit · scroll to zoom</div><div id="scene"></div><div id="scene-error" hidden></div></div>

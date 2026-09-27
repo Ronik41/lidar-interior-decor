@@ -1,5 +1,7 @@
 # Manual furniture placement — September 27, 2026
 
+> Historical chair-only checkpoint. The current [decor library and collision milestone](DECOR_LIBRARY_STATUS.md) supersedes the floor-only UI and unrestricted walking described below. Existing revisions remain unchanged.
+
 The first manual flow works on **second guided-route scan
 `b589d427-b891-4654-acd7-616eacb02e8a`**, with its selected 6,000-step Gaussian
 splat in `reconstructions/guided-pass-2/`. The Scaniverse benchmark was not used as

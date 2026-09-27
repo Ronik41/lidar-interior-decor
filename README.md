@@ -2,30 +2,30 @@
 
 A local, single-user RoomPlan prototype continued from [Apple's sample](https://developer.apple.com/documentation/roomplan/create-a-3d-model-of-an-interior-room-by-guiding-the-user-through-an-ar-experience). The sample license is retained in `LICENSE.txt`. One room only; no design generation, shopping, accounts in the app, or cloud backend.
 
-## Manual furniture placement
+## Local decor library and collision
 
-Open the second guided-route room with `./laptop/new_capture.command`. Choose
-**Place chair on floor**, click open floor in 3D or the linked plan, then use the
-shared proposal inspector to move/rotate, check estimated overlaps, or remove the
-chair. **Save new revision** and **Reopen** preserve the same placement. Existing
-furniture remains visible in the splat; this prototype does not replace it.
-
-The bundled detailed CC0 chair has fixed authored metre dimensions and a
-[documented source](laptop/editor/models/README.md). Its cyan footprint and
-proposal inspector distinguish it from captured furniture. W/A/S/D walking and
-captured viewpoints remain available. Warnings are estimates, not verified
-clearances; close views can show splat fragments across the legs/floor contact.
-
-The saved real-room demonstration opens with:
+The next bounded milestone adds a local chair, original side table, framed painting,
+and fruit bowl. Browse the **Local decor library**, place in 3D, then move, rotate,
+remove, save and reopen. Floor, wall and tabletop anchors are validated; fruit on
+another surface requires explicit height confirmation. These are design props,
+not product matches.
 
 ```sh
-./laptop/furniture.command revision-0002.design.json
+./laptop/furniture.command revision-0005.design.json
 ```
 
-Revision 3 separately demonstrates removal. Earlier revisions remain intact.
-See [FURNITURE_PLACEMENT_STATUS.md](FURNITURE_PLACEMENT_STATUS.md) for controls,
-coordinate/revision contracts, screenshots, cold-reopen verification, tests and
-occlusion limits. Private evidence stays under `validation/furniture-placement/`.
+Revision 5 preserves the original saved chair and adds the table, attached bowl
+and wall art. Walk keeps a fixed 1.60 m eye height and slides/stops against RoomPlan
+walls, floor edges, captured obstacle estimates and placed furniture. Openings
+remain passable within captured floor coverage. Orbit provides unrestricted
+inspection. **Collision debug** shows the actual barriers and sampled walkable
+camera region; **Correct walk obstacle** lets you fix an incorrect detected box.
+
+See [DECOR_LIBRARY_STATUS.md](DECOR_LIBRARY_STATUS.md) for the scene interface,
+controls, licenses, old-revision compatibility, synthetic alternate room, tests,
+private screenshot locations and limits. The splat and all earlier revisions remain
+intact. The [chair-only milestone](FURNITURE_PLACEMENT_STATUS.md) is retained as
+historical evidence. No private scan assets are committed or uploaded.
 
 ## Open the room walkthrough
 
@@ -65,7 +65,7 @@ ZIPs and external folders still go through the verified importer. Use `--no-open
 
 The original **revision 1** 2D demonstration remains unchanged. **Revision 2** demonstrates a TV label and Keep choice, with no measurement correction. **Revision 3** adds a skipped uncertain-door review and a wall-color override. These are explicitly labeled assistant-entered demonstrations, not the user's final furniture or paint preferences. Start from **Original scan** for a clean review.
 
-New revisions use `roomplan-design-input` **schema 3**, retaining source hashes, IDs, JSON pointers, meter coordinates, and immutable parent filename/SHA-256 links. Schema 1 and 2 files still load and upgrade in memory; they are never rewritten. Schema 3 adds separate furniture `proposals` with asset identity and floor anchors. Schema 2 introduced `reference_observations`, `reviews`, and separate color/structure-exclusion overrides. The optional private `reference-observations.json` supplies inspected starting colors; saved schema 2 and 3 files embed their observations. Back up **both `scans/` and `design-inputs/`**. Raw JSON, USDZ, RGB, metadata, received ZIPs, and earlier revisions remain untouched and Git-ignored.
+New revisions use `roomplan-design-input` **schema 4**, retaining source hashes, IDs, JSON pointers, meter coordinates, and immutable parent filename/SHA-256 links. Schema 1, 2 and 3 files still load and upgrade in memory; they are never rewritten. Schema 4 adds scene identity, obstacle corrections and wall/tabletop attachments. Schema 3 added separate furniture `proposals` with asset identity and floor anchors. Schema 2 introduced `reference_observations`, `reviews`, and separate color/structure-exclusion overrides. The optional private `reference-observations.json` supplies inspected starting colors; saved schema 2 and 3 files embed their observations. Back up **both `scans/` and `design-inputs/`**. Raw JSON, USDZ, RGB, metadata, received ZIPs, and earlier revisions remain untouched and Git-ignored.
 
 ### Geometry and review limits
 
@@ -189,4 +189,4 @@ The one-room reconstruction work and actual device evidence are documented in [R
 
 Open the locally registered reconstruction with `./laptop/walkthrough.command`, or run `python3 laptop/edit_room.py scans/SCAN_ID --reconstruction reconstructions/room-pass`. “As scanned” is a photographic reconstruction from the new room pass. “Editable RoomPlan” remains a separate, meter-scale layer for dimensions, review decisions, and the linked 2D plan. The prior scan and all its revisions remain available by passing their original path to the editor.
 
-Use the viewpoint menu to move around the captured room. In Walk mode drag to look, use W/A/S/D to move and Q/E to move down/up; Orbit mode retains orbit/pan/zoom. Movement is inspection only and does not enforce physical collisions. Dark gaps and grey mesh patches are unknown. Photograph-derived appearance is not a paint measurement.
+Use the viewpoint menu to move around the captured room. In Walk mode drag to look and hold W/A/S/D to move at a fixed eye height with RoomPlan and furniture collision. Q/E do not change height. Orbit retains unrestricted orbit/pan/zoom. Collision follows estimated geometry, not verified physical clearance. Dark gaps and grey mesh patches are unknown. Photograph-derived appearance is not a paint measurement.

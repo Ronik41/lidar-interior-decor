@@ -142,7 +142,7 @@ function renderPlan() {
   for(const p of state.proposals){
     const chosen=p.id===selected,g=svg('g',{'data-proposal':p.id,tabindex:0,role:'button','aria-label':`${p.code} ${p.model.name} proposal footprint`,'aria-pressed':String(chosen)});
     g.append(svg('polygon',{points:p.geometry.points.map(pt=>pt.join(',')).join(' '),fill:'#38c4d4','fill-opacity':.30,stroke:p.warnings.length?'#bd6825':'#007d96','stroke-width':chosen?.04:.022}));
-    const [cx,cy]=p.center,angle=(p.anchor.yaw_degrees*Math.PI/180)+state.document.plan_rotation_radians;
+    const [cx,cy]=p.center,angle=((p.yaw_degrees??p.anchor.yaw_degrees??0)*Math.PI/180)+state.document.plan_rotation_radians;
     // Heading points toward model local +Z, the open front of this chair.
     g.append(svg('line',{x1:cx,y1:cy,x2:cx+Math.sin(angle)*p.dimensions_m[2]*.65,y2:cy+Math.cos(angle)*p.dimensions_m[2]*.65,stroke:'#007d96','stroke-width':.025}));
     g.append(svg('text',{x:cx,y:cy+textSize*.3,'font-size':textSize,'text-anchor':'middle',class:'plan-label'},p.code));
@@ -171,7 +171,7 @@ function renderInspector() {
   root.append(node("p",`${e.kind === "objects" ? "OBJECT" : "STRUCTURE"} ${e.code}`,{class:"eyebrow"}),node("h2",pretty(e.label)));
   const evidence=node('div',null,{class:'evidence-facts'});
   evidence.append(node('p',`Category confidence: ${e.confidence || 'missing'} (RoomPlan)`),node('p','Measurement accuracy: unverified'),node('p',`Editable layer color: ${e.color.origin==='reference'?'photo-supported estimate':e.color.origin==='user'?'user choice':'unknown / approximate'}`));root.append(evidence);
-  renderReviewCard(root,e);renderReference(root,e);
+  renderObstacleEditor(root,e);renderReviewCard(root,e);renderReference(root,e);
   root.append(node('p','Edits below affect the RoomPlan layer. Photographic reconstruction remains the captured record.',{class:'muted'}));
   const form = node("form",null,{id:"edit-form"});
   field(form,"Display label","edit-label",e.overrides.label ?? e.label,"A name you recognize on the plan.");
@@ -329,7 +329,7 @@ function setMode(next) {
 $('view-3d').onclick=()=>setMode('3d');$('view-2d').onclick=()=>setMode('2d');
 $('cutaway').onchange=()=>{if(scene){scene.cutaway=$('cutaway').checked;scene.draw();}};
 $('show-excluded').onchange=()=>{if(scene){scene.showExcluded=$('show-excluded').checked;scene.draw();}};
-$('fit-3d').onclick=()=>scene?.fit();$('focus-3d').onclick=()=>scene?.focus(selected);
+$('fit-3d').onclick=()=>{scene?.fit();describeLayer();};$('focus-3d').onclick=()=>scene?.focus(selected);
 $('show-skipped').onclick=()=>{showSkipped=!showSkipped;renderQueue();};
 try {
   scene=new RoomScene($('scene'),choose,commitFloorPlacement,error=>{
@@ -345,9 +345,9 @@ function describeLayer(){
   if(mode==='benchmark')$('view-eyebrow').textContent='EXTERNAL BENCHMARK · RIGIDLY REGISTERED';
   if(scene.reconstruction)$('capture-provenance').textContent=mode==='benchmark'?scene.reconstruction.benchmark.provenance:scene.reconstruction.provenance;
   $('compare-splats').textContent=mode==='benchmark'?'Switch to our splat':'Switch to Scaniverse';
-  document.querySelector('.scene-caption').textContent=scanned?(scene.navigation==='walk'?'Drag to look · W A S D to move · Q / E down / up · gaps lack reliable data':'Drag to orbit · scroll to zoom · W A S D to move · gaps lack reliable data'):'Bounding-box furniture · drag to orbit · scroll to zoom';
+  document.querySelector('.scene-caption').textContent=scanned?(scene.navigation==='walk'?'Hold W A S D to walk · fixed 1.60 m eye height · drag to look':'Drag to orbit · scroll to zoom · unrestricted inspection'):(scene.navigation==='walk'?'Hold W A S D to walk · fixed 1.60 m eye height · drag to look':'Bounding-box furniture · drag to orbit · scroll to zoom');
   $('walk-mode').classList.toggle('active',scene.navigation==='walk');$('orbit-mode').classList.toggle('active',scene.navigation==='orbit');
-  $('layer-note').textContent=scanned?'Photographs + measured depth from this capture. Gaps, grey surfaces and unseen backs remain unknown. Reflections, thin objects and texture seams may be unreliable. RoomPlan is a separate editable estimate; moving through geometry does not establish physical clearance.':'RoomPlan estimates, not a photorealistic room. Use the inspector and linked plan to edit dimensions and review detections.';
+  $('layer-note').textContent=scanned?'Photographs + measured depth from this capture. Gaps, grey surfaces and unseen backs remain unknown. Reflections, thin objects and texture seams may be unreliable. RoomPlan is a separate editable estimate; collision uses RoomPlan estimates, not photographic detail or verified physical clearance.':'RoomPlan estimates, not a photorealistic room. Use the inspector and linked plan to edit dimensions and review detections.';
   if(mode==='benchmark')$('layer-note').textContent='Externally produced Scaniverse PLY · different capture, unknown camera and processing history. Rigid alignment is approximate; no rescaling. Shared viewpoints keep the same viewer camera when switching. Missing areas and reflections remain uncertain. RoomPlan edits apply only to our separate layer.';
   $('scene-tools').hidden=scanned;document.querySelector('.color-key').hidden=scanned;
 }
@@ -360,26 +360,33 @@ $('walk-mode').onclick=()=>{scene?.setNavigation('walk');describeLayer();};
 $('orbit-mode').onclick=()=>{scene?.setNavigation('orbit');describeLayer();};
 
 function renderCatalog(){
-  const root=$('furniture-catalog');
-  if(root.children.length)return;
+  const root=$('furniture-catalog'),opened=new Set([...root.querySelectorAll('details[open]')].map(e=>e.dataset.asset));const first=!root.children.length;root.replaceChildren();
   for(const item of state.furniture_catalog){
-    const card=node('div',null,{class:'catalog-card'});
-    card.append(node('strong',item.name),node('p',`${item.dimensions_m.map(n=>n.toFixed(3)).join(' × ')} m · W / H / D`,{class:'muted'}),node('p','Local detailed model · CC0 · authored dimensions',{class:'muted'}));
-    const add=node('button','Place chair on floor',{class:'primary',id:'place-chair'});
-    add.onclick=()=>action(async()=>{await applyForm();beginPlacement({asset:item});});
-    card.append(add);root.append(card);
+    const card=node('details',null,{class:'catalog-card'});card.dataset.asset=item.id;card.open=opened.has(item.id)||(first&&item.id==='sheen-chair-v1');
+    card.append(node('summary',item.name),node('p',`${item.dimensions_m.map(n=>n.toFixed(2)).join(' × ')} m · W / H / D`,{class:'muted'}),node('p',`${item.description} ${item.license} · ${item.anchor_type} anchor. Design prop, not a product match.`,{class:'muted'}));
+    const add=node('button',`Place ${item.anchor_type==='floor'?'on floor':item.anchor_type==='wall'?'on wall':'on table'}`,{class:'primary',id:item.id==='sheen-chair-v1'?'place-chair':`place-${item.id}`});
+    add.onclick=()=>action(async()=>{await applyForm();beginPlacement({asset:item});});card.append(add);
+    if(item.anchor_type==='tabletop'){
+      const label=node('label','Or use a surface height above the floor (m)',{class:'field'}),input=node('input',null,{type:'number',min:'.15',max:'2.5',step:'.01',value:'.75',id:'surface-height'});label.append(input);card.append(label);
+      const confirmLabel=node('label',null,{class:'exclude-choice'}),check=node('input',null,{type:'checkbox',id:'confirm-surface'});confirmLabel.append(check,document.createTextNode('I confirm this support surface and its height'));card.append(confirmLabel);
+      const custom=node('button','Place on confirmed surface');custom.onclick=()=>action(async()=>{if(!check.checked||!input.reportValidity())throw new Error('Confirm a measured surface height before placing fruit.');await applyForm();beginPlacement({asset:item,confirmedHeight:Number(input.value)});});card.append(custom);
+    }
+    root.append(card);
   }
 }
 function cancelPlacement(){
   placement=null;scene?.setPlacement(null);$('placement-bar').hidden=true;$('plan').classList.remove('placing');
 }
 function beginPlacement(tool){
-  if(!state.placement_floors.length){message('No usable horizontal RoomPlan floor is available for anchoring.',true);return;}
-  placement=tool;currentIssue=null;
-  const item=tool.asset||activeProposal().model;
-  scene?.setPlacement({dimensions_m:item.dimensions_m,yaw_degrees:tool.id?activeProposal().anchor.yaw_degrees:0});
-  $('placement-bar').hidden=false;$('placement-instruction').textContent=tool.id?'Click a new floor position in 3D or the linked plan.':'Click open floor in 3D or the linked plan to place the chair.';
-  $('plan').classList.add('placing');message('Cyan outline previews the footprint. Floor picks do not detect photographic obstacles; inspect the estimates after placing.');
+  if(!state.scene.floors.length){message('No usable horizontal RoomPlan floor is available for anchoring.',true);return;}
+  const proposal=tool.id?activeProposal():null,item=tool.asset||proposal.model;
+  if(proposal?.anchor.type==='confirmed_surface')tool.confirmedHeight=proposal.anchor.height_m;
+  if(item.anchor_type==='tabletop'&&tool.confirmedHeight==null&&!state.proposals.some(p=>p.model.surface)){message('Place a side table first, or explicitly confirm another surface height in the fruit bowl card.',true);return;}
+  placement={...tool,asset:item};currentIssue=null;
+  scene?.setPlacement({...item,confirmedHeight:tool.confirmedHeight,yaw_degrees:proposal?.yaw_degrees||0});
+  $('placement-bar').hidden=false;
+  $('placement-instruction').textContent=item.anchor_type==='wall'?'Click a wall at the painting centre. Edges, doors, windows and openings have an 8 cm margin.':item.anchor_type==='tabletop'&&tool.confirmedHeight==null?'Click the top of your proposed side table. The whole bowl must fit.':tool.confirmedHeight!=null?`Click the confirmed surface at ${tool.confirmedHeight.toFixed(2)} m above floor.`:'Click open floor in 3D or the linked plan.';
+  $('plan').classList.add('placing');message($('placement-instruction').textContent);
 }
 $('cancel-placement').onclick=cancelPlacement;
 window.addEventListener('keydown',event=>{if(event.key==='Escape')cancelPlacement();});
@@ -393,7 +400,10 @@ async function commitFloorPlacement(hit){
       p={id:`proposal-${crypto.randomUUID()}`,asset_id:tool.asset.id,asset_sha256:tool.asset.sha256,dimensions_m:tool.asset.dimensions_m,anchor:{yaw_degrees:0}};
       doc.proposals.push(p);
     }
-    Object.assign(p.anchor,{floor_identifier:hit.floor_identifier,x_m:hit.x_m,z_m:hit.z_m});
+    const oldYaw=p.anchor.yaw_degrees||0;
+    if(hit.type==='wall'){const {world,...anchor}=hit;p.anchor=anchor;}
+    else if(hit.type==='tabletop')p.anchor={type:'tabletop',support_identifier:hit.support_identifier,x_m:hit.x_m,z_m:hit.z_m,yaw_degrees:oldYaw};
+    else {p.anchor={floor_identifier:hit.floor_identifier,x_m:hit.x_m,z_m:hit.z_m,yaw_degrees:oldYaw};if(tool.confirmedHeight!=null)Object.assign(p.anchor,{type:'confirmed_surface',height_m:tool.confirmedHeight,confirmed:true});}
     const next=await api('/api/preview',{document:doc,filename:state.filename});
     cancelPlacement();state=next;selected=p.id;dirty=true;formDirty=false;render();
     message('Proposal placed in both views. Captured furniture is unchanged. Save a revision to keep the placement.');
@@ -409,50 +419,54 @@ function pointInPolygon(p,poly){
 }
 $('plan').addEventListener('click',event=>{
   if(!placement)return;
+  if(placement.asset.anchor_type==='wall'){message('Place paintings by clicking the wall in 3D.');return;}
+  if(placement.asset.anchor_type==='tabletop'&&placement.confirmedHeight==null){message('Click the top of a proposed table in 3D.');return;}
   const pt=new DOMPoint(event.clientX,event.clientY).matrixTransform($('plan').getScreenCTM().inverse());
-  const floor=state.placement_floors.find(f=>pointInPolygon([pt.x,pt.y],f.plan_points));
+  const floor=state.scene.floors.find(f=>pointInPolygon([pt.x,pt.y],f.plan_points));
   if(!floor){message('Choose a point inside the estimated RoomPlan floor.',true);return;}
   const a=state.document.plan_rotation_radians,c=Math.cos(a),s=Math.sin(a);
   commitFloorPlacement({floor_identifier:floor.identifier,x_m:c*pt.x-s*pt.y,z_m:s*pt.x+c*pt.y});
 });
 function renderProposalInspector(p){
   const root=$('inspector');root.replaceChildren();
-  root.append(node('p',`PROPOSED FURNITURE · ${p.code}`,{class:'eyebrow'}),node('h2',p.model.name),node('p','Cyan footprint = your proposal. Existing chairs and sofa remain in the captured room.',{class:'proposal-notice'}));
+  root.append(node('p',`DESIGN PROP · ${p.code}`,{class:'eyebrow'}),node('h2',p.model.name),node('p','Local design prop · authored dimensions · no product match',{class:'proposal-notice'}));
   const facts=node('div',null,{class:'evidence-facts'});
-  facts.append(node('p',`${p.dimensions_m.map(n=>n.toFixed(3)).join(' × ')} m · width / height / depth`),node('p',p.model.dimension_basis),node('p',`Bottom anchored to ${p.floor_code} · Y ${p.position_m[1].toFixed(3)} m`));root.append(facts);
-  const warnings=node('div',null,{class:`placement-warnings${p.warnings.length?' conflict':''}`,role:'status',id:'placement-warnings'});
-  warnings.append(node('strong',p.warnings.length?'Check this placement':'No estimated overlap detected'));
-  for(const warning of p.warnings)warnings.append(node('p',warning));
-  warnings.append(node('p','Estimates only, not verified clearances. Missing detections, doors and splat misalignment can hide obstructions.'));root.append(warnings);
-  const form=node('form',null,{id:'placement-form'}),dims=node('div',null,{class:'dimensions'});
-  for(const [key,label,value] of [['x','Scan X (m)',p.anchor.x_m],['z','Scan Z (m)',p.anchor.z_m],['yaw','Heading (°)',p.anchor.yaw_degrees]]){
-    const input=field(dims,label,`place-${key}`,Number(value.toFixed(4)),null,'number');input.min=key==='yaw'?'-360':'-100';input.max=key==='yaw'?'360':'100';input.step='any';input.required=true;
-  }
-  form.append(dims,node('p','X / Z use the original scan axes. Heading rotates around vertical; model size stays fixed.',{class:'muted'}));
+  facts.append(node('p',`${p.dimensions_m.map(n=>n.toFixed(3)).join(' × ')} m · W / H / D`),node('p',`Attached to ${p.floor_code} · scene Y ${p.position_m[1].toFixed(3)} m`),node('p',p.model.dimension_basis));root.append(facts);
+  const warnings=node('details',null,{class:`placement-warnings${p.warnings.length?' conflict':''}`,id:'placement-warnings'});warnings.open=!!p.warnings.length;
+  warnings.append(node('summary',p.warnings.length?'Check this placement':'No estimated overlap detected'));for(const warning of p.warnings)warnings.append(node('p',warning));warnings.append(node('p','Estimates only, not verified clearances. Captured furniture remains in the splat.'));root.append(warnings);
+  const form=node('form',null,{id:'placement-form'}),dims=node('div',null,{class:'dimensions'}),wall=p.anchor.type==='wall';
+  const fields=wall?[['u_m','Along wall (m)',-100,100],['bottom_m','Bottom above wall base (m)',0,10],['roll_degrees','Rotation on wall (°)',-360,360],['mount_offset_m','Mount offset from wall plane (m)',.005,.15]]:[['x_m',p.anchor.type==='tabletop'?'Table local X (m)':'Scene X (m)',-100,100],['z_m',p.anchor.type==='tabletop'?'Table local Z (m)':'Scene Z (m)',-100,100],['yaw_degrees','Heading (°)',-360,360]];
+  for(const [key,label,min,max] of fields){const input=field(dims,label,`place-${key}`,Number((p.anchor[key]??.014).toFixed(4)),null,'number');input.min=min;input.max=max;input.required=true;}
+  form.append(dims,node('p',wall?'Rotation stays in the wall plane. Mount offset is an explicit visual correction for RoomPlan / splat mismatch, not a measured wall contact. Move on surface to choose another wall.':p.anchor.type==='tabletop'?'Coordinates and rotation follow the table when it moves.':'Coordinates belong to this scene; size stays fixed.',{class:'muted'}));
   const buttons=node('div',null,{class:'form-buttons'});buttons.append(node('button','Apply placement',{type:'submit',class:'primary'}));
-  const move=node('button','Move on floor',{type:'button'});move.onclick=()=>action(async()=>{await applyPlacementForm();beginPlacement({id:p.id});});buttons.append(move);form.append(buttons);
+  const move=node('button','Move on surface',{type:'button'});move.onclick=()=>action(async()=>{await applyPlacementForm();beginPlacement({id:p.id});});buttons.append(move);form.append(buttons);
   const nudge=node('div',null,{class:'nudge-controls'});
-  for(const [label,key,delta] of [['X −10 cm','x',-.1],['X +10 cm','x',.1],['Z −10 cm','z',-.1],['Z +10 cm','z',.1],['Rotate −15°','yaw',-15],['Rotate +15°','yaw',15]]){
-    const b=node('button',label,{type:'button'});b.onclick=()=>action(async()=>{
-      if(!form.reportValidity())return;
-      const input=$(`place-${key}`);let value=Number(input.value)+delta;if(key==='yaw')value=((value+180)%360+360)%360-180;input.value=value.toFixed(4);formDirty=true;await applyPlacementForm();
-    });nudge.append(b);
-  }
-  form.append(nudge);form.oninput=()=>{formDirty=true;renderStatus();};form.onsubmit=event=>{event.preventDefault();action(async()=>{await applyPlacementForm();message('Placement updated in 3D and 2D. Save to keep it.');});};root.append(form);
-  const focus=node('button','Inspect chair in 3D',{id:'inspect-proposal'});focus.onclick=()=>{setMode('3d');scene?.focus(p.id);};
-  const remove=node('button','Remove proposal',{id:'remove-proposal',class:'danger'});remove.onclick=()=>action(async()=>{
-    const doc=structuredClone(state.document);doc.proposals=doc.proposals.filter(x=>x.id!==p.id);
-    state=await api('/api/preview',{document:doc,filename:state.filename});cancelPlacement();selected=null;formDirty=false;dirty=true;render();message('Proposal removed from this draft. Captured furniture and saved revisions remain unchanged.');
-  });root.append(focus,remove);
-  const source=node('div',null,{class:'source-details'});source.append(node('strong','Model identity & source'),node('p',`${p.model.author} · ${p.model.license}`),node('a','Khronos source & license',{href:p.model.source_url,target:'_blank',rel:'noopener'}),node('code',p.id),node('code',`Asset SHA-256: ${p.asset_sha256}`));root.append(source);
+  const moves=wall?[['Left 10 cm','u_m',-.1],['Right 10 cm','u_m',.1],['Down 10 cm','bottom_m',-.1],['Up 10 cm','bottom_m',.1],['Rotate −15°','roll_degrees',-15],['Rotate +15°','roll_degrees',15]]:[['X −10 cm','x_m',-.1],['X +10 cm','x_m',.1],['Z −10 cm','z_m',-.1],['Z +10 cm','z_m',.1],['Rotate −15°','yaw_degrees',-15],['Rotate +15°','yaw_degrees',15]];
+  for(const [label,key,delta] of moves){const b=node('button',label,{type:'button'});b.onclick=()=>action(async()=>{const input=$(`place-${key}`);input.value=(Number(input.value)+delta).toFixed(4);formDirty=true;await applyPlacementForm();});nudge.append(b);}
+  form.append(nudge);form.oninput=()=>{formDirty=true;renderStatus();};form.onsubmit=event=>{event.preventDefault();action(async()=>{await applyPlacementForm();message('Placement updated. Save to keep it.');});};root.append(form);
+  const focus=node('button','Inspect prop in 3D',{id:'inspect-proposal'});focus.onclick=()=>{setMode('3d');scene?.focus(p.id);};
+  const attached=state.proposals.filter(x=>x.anchor.support_identifier===p.id);
+  const remove=node('button',attached.length?'Remove table and attached decor':'Remove proposal',{id:'remove-proposal',class:'danger'});remove.onclick=()=>action(async()=>{const doc=structuredClone(state.document);doc.proposals=doc.proposals.filter(x=>x.id!==p.id&&x.anchor.support_identifier!==p.id);state=await api('/api/preview',{document:doc,filename:state.filename});cancelPlacement();selected=null;formDirty=false;dirty=true;render();message('Removed from this draft. Save to keep the change. Earlier revisions remain available.');});root.append(focus,remove);
+  const source=node('div',null,{class:'source-details'});source.append(node('strong','Model identity & source'),node('p',`${p.model.author} · ${p.model.license}`),node('a','Model source & license',{href:p.model.source_url,target:'_blank',rel:'noopener'}),node('code',p.id),node('code',`Asset SHA-256: ${p.asset_sha256}`));root.append(source);
 }
 async function applyPlacementForm(){
   if(!formDirty)return;
   const form=$('placement-form');if(!form?.reportValidity())throw new Error('Check the placement values.');
   const doc=structuredClone(state.document),p=doc.proposals.find(p=>p.id===selected);
-  Object.assign(p.anchor,{x_m:Number($('place-x').value),z_m:Number($('place-z').value),yaw_degrees:Number($('place-yaw').value)});
+  for(const key of p.anchor.type==='wall'?['u_m','bottom_m','roll_degrees','mount_offset_m']:['x_m','z_m','yaw_degrees'])p.anchor[key]=Number($(`place-${key}`).value);
   state=await api('/api/preview',{document:doc,filename:state.filename});dirty=true;formDirty=false;render();
 }
+function renderObstacleEditor(root,e){
+  const obstacle=state.scene.objects.find(o=>o.id===e.source.identifier);if(!obstacle)return;
+  const override=state.document.navigation_overrides[obstacle.id],box=override?.box||obstacle.box;
+  const details=node('details',null,{class:'obstacle-editor'});details.append(node('summary','Correct walk obstacle'));
+  details.append(node('p',`Automatic collision: ${obstacle.reliable?'included':'omitted'} · ${obstacle.confidence||'unknown'} confidence. This correction affects walking only.`,{class:'muted'}));
+  const form=node('form'),label=node('label',null,{class:'exclude-choice'}),check=node('input',null,{type:'checkbox',id:'obstacle-enabled'});check.checked=override?.enabled??obstacle.reliable;label.append(check,document.createTextNode('Block walking through this object'));form.append(label);
+  for(const [key,label] of [['x_m','Centre X (m)'],['z_m','Centre Z (m)'],['width_m','Width (m)'],['depth_m','Depth (m)'],['yaw_degrees','Heading (°)']]){const input=field(form,label,`obstacle-${key}`,Number(box[key].toFixed(4)),null,'number');input.min=key.includes('width')||key.includes('depth')?'.01':'-360';input.max='360';input.required=true;}
+  form.append(node('button','Apply walk obstacle',{class:'primary',type:'submit'}));form.onsubmit=event=>{event.preventDefault();action(async()=>{if(!form.reportValidity())return;const b={};for(const k of Object.keys(box))b[k]=Number($(`obstacle-${k}`).value);const enabled=check.checked;await applyForm();const doc=structuredClone(state.document);doc.navigation_overrides[obstacle.id]={enabled,box:b};state=await api('/api/preview',{document:doc,filename:state.filename});dirty=true;render();message('Walk obstacle corrected. Save a revision to keep it.');});};
+  const reset=node('button','Use automatic obstacle',{type:'button'});reset.onclick=()=>action(async()=>{const doc=structuredClone(state.document);delete doc.navigation_overrides[obstacle.id];state=await api('/api/preview',{document:doc,filename:state.filename});dirty=true;render();});form.append(reset);details.append(form);root.append(details);
+}
+$('collision-debug').onchange=()=>{scene.debugRoot.visible=$('collision-debug').checked;scene.draw();};
 action(async()=>{
   state=await api('/api/state');token=state.token;selected=state.proposals[0]?.id||state.elements.find(e=>e.kind==='objects')?.source.identifier||state.elements[0]?.source.identifier;render();
   const reconstruction=await api('/api/reconstruction');

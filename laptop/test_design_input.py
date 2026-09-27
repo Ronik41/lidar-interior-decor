@@ -142,7 +142,7 @@ class DesignInputTests(unittest.TestCase):
         self.assertEqual(after["original_dimensions_m"],before["original_dimensions_m"])
 
     def test_invalid_versions_source_links_decisions_and_numbers_rejected(self):
-        mutations = [lambda d:d.update(schema_version=4), lambda d:d.update(schema_version=True),
+        mutations = [lambda d:d.update(schema_version=5), lambda d:d.update(schema_version=True),
                      lambda d:d["source"].update(room_sha256="wrong"),
                      lambda d:d["elements"][0]["source"].update(identifier="wrong"),
                      lambda d:d["elements"].pop(), lambda d:d["elements"][0].update(decision="remove"),

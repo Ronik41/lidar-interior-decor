@@ -1,0 +1,163 @@
+{
+  "walls": [
+    {
+      "identifier": "partition",
+      "category": {
+        "wall": {}
+      },
+      "dimensions": [
+        6,
+        2.8,
+        0
+      ],
+      "transform": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        12,
+        1.4,
+        9,
+        1
+      ],
+      "confidence": {
+        "high": {}
+      }
+    }
+  ],
+  "doors": [],
+  "openings": [
+    {
+      "identifier": "passage",
+      "category": {
+        "opening": {}
+      },
+      "dimensions": [
+        1.2,
+        2.3,
+        0
+      ],
+      "transform": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        12,
+        1.15,
+        9,
+        1
+      ],
+      "confidence": {
+        "high": {}
+      },
+      "parentIdentifier": "partition"
+    }
+  ],
+  "windows": [],
+  "objects": [
+    {
+      "identifier": "synthetic-cabinet",
+      "category": {
+        "storage": {}
+      },
+      "dimensions": [
+        0.8,
+        1,
+        0.5
+      ],
+      "transform": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        10,
+        0.5,
+        7,
+        1
+      ],
+      "confidence": {
+        "high": {}
+      }
+    }
+  ],
+  "floors": [
+    {
+      "identifier": "synthetic-floor",
+      "category": {
+        "floor": {}
+      },
+      "dimensions": [
+        6,
+        8,
+        0
+      ],
+      "transform": [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        -1,
+        0,
+        0,
+        12,
+        0,
+        9,
+        1
+      ],
+      "confidence": {
+        "high": {}
+      },
+      "polygonCorners": [
+        [
+          -3,
+          -4,
+          0
+        ],
+        [
+          3,
+          -4,
+          0
+        ],
+        [
+          3,
+          4,
+          0
+        ],
+        [
+          -3,
+          4,
+          0
+        ]
+      ]
+    }
+  ]
+}

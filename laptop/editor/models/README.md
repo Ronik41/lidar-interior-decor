@@ -1,5 +1,12 @@
 # Local furniture catalog
 
+The catalog now also includes original **walnut side table**, **framed painting**,
+and **ceramic fruit bowl** GLBs. Their reproducible generator and CC0 dedication
+are in [ORIGINAL-ASSETS.md](ORIGINAL-ASSETS.md). Each entry records actual bounds,
+SHA-256, anchor type and collision box; the table also defines its inset top surface.
+All four are local design props, not retail product matches. See
+[the milestone](../../../DECOR_LIBRARY_STATUS.md) for anchors and collision.
+
 The bundled `sheen-chair/SheenChair.glb` is the **public CC0 Sheen Chair** by
 Eric Chadwick / Wayfair, LLC (2020), from the Khronos glTF Sample Assets repository.
 It is not private scan data. Geometry and all textures are embedded in this local
