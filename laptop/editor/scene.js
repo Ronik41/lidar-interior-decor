@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
+import { GLTFLoader } from './vendor/GLTFLoader.js';
 
 export class RoomScene {
   constructor(host, onSelect) {
@@ -19,11 +20,26 @@ export class RoomScene {
     this.controls.addEventListener('change',()=>this.draw());
     this.scene.add(new THREE.HemisphereLight(0xffffff,0x87968b,2.2));
     const light=new THREE.DirectionalLight(0xffffff,2.1);light.position.set(3,7,4);this.scene.add(light);
+    this.captureRoot=new THREE.Group();this.scene.add(this.captureRoot);this.layerMode="roomplan";this.navigation="orbit";this.overlay=false;
     this.root=new THREE.Group();this.scene.add(this.root);this.groups=new Map();this.labels=[];
     this.ray=new THREE.Raycaster();this.pointer=new THREE.Vector2();
     let down;
-    this.renderer.domElement.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];});
+    this.renderer.domElement.addEventListener('pointerdown',e=>{
+      down=[e.clientX,e.clientY];
+      if(this.navigation==='walk' && e.button===0){this.lookDrag=[e.clientX,e.clientY];this.renderer.domElement.setPointerCapture(e.pointerId);}
+    });
+    this.renderer.domElement.addEventListener('pointermove',e=>{
+      if(!this.lookDrag)return;
+      const dx=e.clientX-this.lookDrag[0],dy=e.clientY-this.lookDrag[1];this.lookDrag=[e.clientX,e.clientY];
+      const direction=this.controls.target.clone().sub(this.camera.position).normalize();
+      const yaw=Math.atan2(direction.x,direction.z)-dx*.004;
+      const pitch=THREE.MathUtils.clamp(Math.asin(direction.y)-dy*.004,-1.4,1.4);
+      this.controls.target.copy(this.camera.position).add(new THREE.Vector3(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch)).multiplyScalar(2));
+      this.camera.lookAt(this.controls.target);this.draw();
+    });
+    this.renderer.domElement.addEventListener('pointercancel',()=>{this.lookDrag=null;});
     this.renderer.domElement.addEventListener('pointerup',e=>{
+      this.lookDrag=null;
       if(!down || Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;
       const rect=this.renderer.domElement.getBoundingClientRect();
       this.pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);
@@ -32,6 +48,12 @@ export class RoomScene {
       if(hits[0])this.onSelect(hits[0].object.userData.id);
     });
     this.renderer.domElement.addEventListener('keydown',e=>{
+      if(this.layerMode!=='roomplan' && 'wasdqe'.includes(e.key.toLowerCase()) && e.key.length===1){
+        e.preventDefault();const key=e.key.toLowerCase(),forward=this.controls.target.clone().sub(this.camera.position);forward.y=0;forward.normalize();
+        const right=forward.clone().cross(new THREE.Vector3(0,1,0));const delta=new THREE.Vector3();
+        if(key==='w')delta.copy(forward);if(key==='s')delta.copy(forward).negate();if(key==='a')delta.copy(right).negate();if(key==='d')delta.copy(right);if(key==='q')delta.y=-1;if(key==='e')delta.y=1;
+        delta.multiplyScalar(e.shiftKey?.5:.2);this.camera.position.add(delta);this.controls.target.add(delta);this.camera.lookAt(this.controls.target);this.draw();return;
+      }
       if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','-'].includes(e.key))e.preventDefault();
       const offset=this.camera.position.clone().sub(this.controls.target);
       if(e.key==='ArrowLeft'||e.key==='ArrowRight')offset.applyAxisAngle(new THREE.Vector3(0,1,0),e.key==='ArrowLeft'?.15:-.15);
@@ -84,7 +106,7 @@ export class RoomScene {
     const first=!this.state;this.state=state;this.selected=selected;
     this.root.traverse(o=>{o.geometry?.dispose();if(o.material){o.material.map?.dispose();o.material.dispose();}});
     this.root.clear();for(const item of this.labels)item.el.remove();this.labels=[];this.groups.clear();
-    this.root.rotation.y=state.document.plan_rotation_radians;
+    this.root.rotation.y=state.document.plan_rotation_radians;this.captureRoot.rotation.y=this.root.rotation.y;
     for(const e of state.elements) {
       if(!e.spatial)continue;
       const group=new THREE.Group();group.matrixAutoUpdate=false;group.matrix.fromArray(e.spatial.transform);group.userData.element=e;this.root.add(group);this.groups.set(e.source.identifier,group);
@@ -111,6 +133,34 @@ export class RoomScene {
     if(first)this.fit();else this.highlight(selected);
     this.resize();
   }
+  async loadReconstruction(metadata) {
+    this.reconstruction=metadata;
+    const model=await new GLTFLoader().loadAsync(metadata.mesh_url);
+    this.meshScan=model.scene;this.captureRoot.add(this.meshScan);
+    this.setLayer('mesh');this.setNavigation('walk');this.goToView(0);
+  }
+  async setLayer(mode) {
+    if(mode==='splat' && !this.splatScan){
+      if(!this.reconstruction?.splat_url)throw new Error('No successful Gaussian candidate is available');
+      const {SparkRenderer,SplatMesh}=await import('./vendor/spark.module.js');
+      this.spark=new SparkRenderer({renderer:this.renderer,onDirty:()=>this.requestDraw()});this.scene.add(this.spark);
+      this.splatScan=new SplatMesh({url:this.reconstruction.splat_url});
+      await this.splatScan.initialized;this.captureRoot.add(this.splatScan);
+
+    }
+    this.layerMode=mode;this.root.visible=mode==='roomplan'||this.overlay;
+    this.captureRoot.visible=mode!=='roomplan';if(this.meshScan)this.meshScan.visible=mode==='mesh';if(this.splatScan)this.splatScan.visible=mode==='splat';
+    if(mode==='roomplan'){this.setNavigation('orbit');this.fit();}
+    this.renderer.setClearColor(mode==='roomplan'?0xe7ebe7:0x202830,1);this.draw();
+  }
+  setNavigation(mode){this.navigation=mode;this.controls.enabled=mode==='orbit';this.renderer.domElement.setAttribute('aria-label',mode==='walk'?'Interactive scanned room. Drag to look. W A S D move, Q and E move down and up.':'Interactive room model. Drag to orbit, scroll to zoom, Shift-drag to pan.');this.camera.up.set(0,1,0);this.controls.maxPolarAngle=mode==='orbit'&&this.layerMode==='roomplan'?Math.PI*.495:Math.PI*.99;this.draw();}
+  goToView(index){
+    const v=this.reconstruction?.viewpoints[index];if(!v)return;
+    const pose=new THREE.Matrix4().fromArray(v.camera_to_world_column_major);
+    this.captureRoot.updateMatrixWorld(true);pose.premultiply(this.captureRoot.matrixWorld);
+    this.camera.position.setFromMatrixPosition(pose);const dir=new THREE.Vector3(0,0,-1).transformDirection(pose);
+    this.camera.up.set(0,1,0);this.controls.target.copy(this.camera.position).addScaledVector(dir,2);this.camera.fov=62;this.camera.updateProjectionMatrix();this.camera.lookAt(this.controls.target);this.draw();
+  }
   fit() {
     if(!this.center)return;
     this.controls.target.copy(this.center);this.controls.target.y-=this.size.y*.12;
@@ -121,6 +171,20 @@ export class RoomScene {
   focus(id) {
     const group=this.groups.get(id);if(!group)return;
     const center=new THREE.Box3().setFromObject(group).getCenter(new THREE.Vector3());
+    if(this.layerMode!=='roomplan' && this.reconstruction?.viewpoints.length){
+      // Review from a recorded camera position instead of fitting a box from outside the scan.
+      let best=0,bestScore=Infinity;
+      this.captureRoot.updateMatrixWorld(true);
+      this.reconstruction.viewpoints.forEach((v,index)=>{
+        const pose=new THREE.Matrix4().fromArray(v.camera_to_world_column_major).premultiply(this.captureRoot.matrixWorld);
+        const position=new THREE.Vector3().setFromMatrixPosition(pose),toElement=center.clone().sub(position);
+        const distance=toElement.length(),direction=new THREE.Vector3(0,0,-1).transformDirection(pose);
+        const alignment=direction.dot(toElement.normalize());
+        const score=distance+Math.max(0,1-alignment)*3+(distance<.4?10:0);
+        if(score<bestScore){bestScore=score;best=index;}
+      });
+      this.goToView(best);this.controls.target.copy(center);this.camera.lookAt(center);this.draw();return;
+    }
     const delta=this.camera.position.clone().sub(this.controls.target).normalize();
     const e=group.userData.element;
     const distance=Math.max(2.2,...e.dimensions_m.filter(Number.isFinite).map(x=>x*2));
@@ -137,6 +201,7 @@ export class RoomScene {
     const w=this.host.clientWidth,h=this.host.clientHeight;if(!w||!h)return;
     this.renderer.setSize(w,h);this.camera.aspect=w/h;this.camera.updateProjectionMatrix();this.draw();
   }
+  requestDraw(){if(this.drawPending)return;this.drawPending=true;requestAnimationFrame(()=>{this.drawPending=false;this.draw();});}
   draw() {
     if(!this.state)return;
     this.root.updateMatrixWorld(true);
@@ -147,14 +212,14 @@ export class RoomScene {
       const outward=pos.clone().sub(this.center);outward.y=0;
       const ghost=e.kind==='walls' && this.cutaway && outward.dot(camDirection)>0 && id!==this.selected;
       g.traverse(o=>{
-        if(o.isMesh){o.material.opacity=e.excluded?.09:ghost?.12:o.userData.aperture?.09:1;o.material.depthWrite=!e.excluded && !ghost && !o.userData.aperture;o.userData.ghost=ghost;}
+        if(o.isMesh){o.material.visible=this.layerMode==='roomplan';o.material.opacity=e.excluded?.09:ghost?.12:o.userData.aperture?.09:1;o.material.depthWrite=!e.excluded && !ghost && !o.userData.aperture;o.userData.ghost=ghost;}
         if(o.isLineSegments)o.material.opacity=e.excluded?.35:ghost?.25:1;
       });
     }
     this.renderer.render(this.scene,this.camera);
     for(const {el,group,e} of this.labels) {
       const pos=new THREE.Vector3(0,(e.dimensions_m[1]||0)/2+.08,0).applyMatrix4(group.matrixWorld).project(this.camera);
-      el.hidden=!group.visible || pos.z>1 || pos.z< -1 || Math.abs(pos.x)>.98 || Math.abs(pos.y)>.94;
+      el.hidden=!this.root.visible || !group.visible || pos.z>1 || pos.z< -1 || Math.abs(pos.x)>.98 || Math.abs(pos.y)>.94;
       el.style.left=`${(pos.x+1)*50}%`;el.style.top=`${(-pos.y+1)*50}%`;
       el.classList.toggle('selected',e.source.identifier===this.selected);
       el.classList.toggle('related',this.related?.includes(e.source.identifier));

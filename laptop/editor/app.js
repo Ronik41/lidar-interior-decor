@@ -151,8 +151,9 @@ function renderInspector() {
   if (!e) return;
   root.append(node("p",`${e.kind === "objects" ? "OBJECT" : "STRUCTURE"} ${e.code}`,{class:"eyebrow"}),node("h2",pretty(e.label)));
   const evidence=node('div',null,{class:'evidence-facts'});
-  evidence.append(node('p',`Category confidence: ${e.confidence || 'missing'} (RoomPlan)`),node('p','Measurement accuracy: unverified'),node('p',`Color: ${e.color.origin==='reference'?'photo-supported estimate':e.color.origin==='user'?'user choice':'unknown / approximate'}`));root.append(evidence);
+  evidence.append(node('p',`Category confidence: ${e.confidence || 'missing'} (RoomPlan)`),node('p','Measurement accuracy: unverified'),node('p',`Editable layer color: ${e.color.origin==='reference'?'photo-supported estimate':e.color.origin==='user'?'user choice':'unknown / approximate'}`));root.append(evidence);
   renderReviewCard(root,e);renderReference(root,e);
+  root.append(node('p','Edits below affect the RoomPlan layer. Photographic reconstruction remains the captured record.',{class:'muted'}));
   const form = node("form",null,{id:"edit-form"});
   field(form,"Display label","edit-label",e.overrides.label ?? e.label,"A name you recognize on the plan.");
   field(form,"Category correction","edit-category",e.overrides.category ?? e.original_category,`Original RoomPlan category: ${e.original_category || "missing"}. Corrections stay separate.`);
@@ -271,7 +272,7 @@ function render() {
   $("summary").replaceChildren(node("span",`${counts.keep} keep · ${counts.remove} remove · ${counts.unsure} unsure`),node("span",`${missing} geometry warnings · ${state.missing_collections.length} missing collections`));
 }
 $("save").addEventListener("click",()=>action(async()=>{
-  await applyForm();state=await api("/api/save",{document:state.document,filename:state.filename});dirty=false;formDirty=false;render();message(`Saved ${state.filename}. Reopen it to verify the saved plan and decisions.`);
+  message("Verifying source and saving revision…");await applyForm();state=await api("/api/save",{document:state.document,filename:state.filename});dirty=false;formDirty=false;render();message(`Saved ${state.filename}. Reopen it to verify the saved plan and decisions.`);
 }));
 $("reopen").addEventListener("click",()=>action(async()=>{
   const name=$("versions").value;if(!name)throw new Error("Save a revision first, then choose it here.");
@@ -297,10 +298,11 @@ window.addEventListener("pointermove",event=>{
 window.addEventListener("beforeunload",event=>{if(dirty || formDirty){event.preventDefault();event.returnValue="";}});
 window.addEventListener("resize",()=>{if(state)renderPlan();});
 function setMode(next) {
-  mode=next;document.querySelector('.workspace').classList.toggle('plan-mode',mode==='2d');
+  mode=next;$('capture-tools').hidden=mode==='2d'||!scene?.reconstruction;document.querySelector('.workspace').classList.toggle('plan-mode',mode==='2d');
   $('view-3d').classList.toggle('active',mode==='3d');$('view-2d').classList.toggle('active',mode==='2d');
   $('view-3d').setAttribute('aria-pressed',String(mode==='3d'));$('view-2d').setAttribute('aria-pressed',String(mode==='2d'));
   $('view-title').textContent=mode==='3d'?'A feel for the space':'Check the layout';$('view-eyebrow').textContent=mode==='3d'?'3D ROOM · METERS':'OVERHEAD PLAN · METERS';
+  if(mode==='3d' && scene?.reconstruction)describeLayer();
   requestAnimationFrame(()=>{renderPlan();scene?.resize();});
 }
 $('view-3d').onclick=()=>setMode('3d');$('view-2d').onclick=()=>setMode('2d');
@@ -310,4 +312,30 @@ $('fit-3d').onclick=()=>scene?.fit();$('focus-3d').onclick=()=>scene?.focus(sele
 $('show-skipped').onclick=()=>{showSkipped=!showSkipped;renderQueue();};
 try { scene=new RoomScene($('scene'),choose); }
 catch(error) { $('scene-error').hidden=false;$('scene-error').textContent=`3D unavailable: ${error.message}. The linked 2D plan and editor are still available.`; }
-action(async()=>{state=await api("/api/state");token=state.token;selected=state.elements.find(e=>e.kind==="objects")?.source.identifier || state.elements[0]?.source.identifier;render();});
+function describeLayer(){
+  const mode=scene.layerMode,scanned=mode!=='roomplan';
+  $('view-title').textContent=scanned?'Walk through your room':'A feel for the space';
+  $('view-eyebrow').textContent=scanned?'AS SCANNED · LOCAL RECONSTRUCTION':'EDITABLE ROOMPLAN · METERS';
+  document.querySelector('.scene-caption').textContent=scanned?(scene.navigation==='walk'?'Drag to look · W A S D to move · Q / E down / up · gaps lack reliable data':'Drag to orbit · scroll to zoom · W A S D to move · gaps lack reliable data'):'Bounding-box furniture · drag to orbit · scroll to zoom';
+  $('walk-mode').classList.toggle('active',scene.navigation==='walk');$('orbit-mode').classList.toggle('active',scene.navigation==='orbit');
+  $('layer-note').textContent=scanned?'Photographs + measured depth from this capture. Gaps, grey surfaces and unseen backs remain unknown. Reflections, thin objects and texture seams may be unreliable. RoomPlan is a separate editable estimate; moving through geometry does not establish physical clearance.':'RoomPlan estimates, not a photorealistic room. Use the inspector and linked plan to edit dimensions and review detections.';
+  $('scene-tools').hidden=scanned;document.querySelector('.color-key').hidden=scanned;
+}
+$('scan-layer').onchange=()=>action(async()=>{await scene.setLayer($('scan-layer').value);describeLayer();});
+$('roomplan-overlay').onchange=()=>{scene.overlay=$('roomplan-overlay').checked;scene.root.visible=scene.layerMode==='roomplan'||scene.overlay;scene.draw();};
+$('go-viewpoint').onclick=()=>scene?.goToView(Number($('capture-viewpoint').value));
+$('expand-room').onclick=()=>{const expanded=document.body.classList.toggle('expanded-room');$('expand-room').textContent=expanded?'Show editor':'Expand 3D';$('expand-room').setAttribute('aria-pressed',String(expanded));requestAnimationFrame(()=>scene?.resize());};
+$('walk-mode').onclick=()=>{scene?.setNavigation('walk');describeLayer();};
+$('orbit-mode').onclick=()=>{scene?.setNavigation('orbit');describeLayer();};
+action(async()=>{
+  state=await api('/api/state');token=state.token;selected=state.elements.find(e=>e.kind==='objects')?.source.identifier||state.elements[0]?.source.identifier;render();
+  const reconstruction=await api('/api/reconstruction');
+  if(reconstruction && scene){
+    $('capture-tools').hidden=false;$('capture-provenance').textContent=reconstruction.provenance;
+    reconstruction.viewpoints.forEach((v,i)=>$('capture-viewpoint').append(node('option',v.label,{value:String(i)})));
+    $('scan-layer').querySelector('[value="splat"]').disabled=!reconstruction.splat_url;
+    message('Loading the photographic reconstruction…');await scene.loadReconstruction(reconstruction);
+    if(reconstruction.preferred==='splat'){await scene.setLayer('splat');$('scan-layer').value='splat';}
+    describeLayer();message('');
+  }
+});

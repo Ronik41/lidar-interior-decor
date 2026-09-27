@@ -14,6 +14,9 @@ import AVFoundation
 
 class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, RoomCaptureSessionDelegate {
     var captureSparseFrames = false
+    var captureRoomPass = false
+    private let coverageLabel = UILabel()
+    private var roomPassEndTimer: Timer?
     var runBoundedProbe = false
     private var sparseRecorder: SparseFrameRecorder?
     private var probeTimer: Timer?
@@ -46,6 +49,24 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         // Set up after loading the view.
         setupRoomCaptureView()
         activityIndicator?.stopAnimating()
+        if captureRoomPass {
+            coverageLabel.numberOfLines = 6
+            coverageLabel.textAlignment = .center
+            coverageLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+            coverageLabel.textColor = .white
+            coverageLabel.backgroundColor = UIColor.black.withAlphaComponent(0.78)
+            coverageLabel.layer.cornerRadius = 8
+            coverageLabel.clipsToBounds = true
+            coverageLabel.text = "3-minute room pass · preparing camera…"
+            coverageLabel.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(coverageLabel)
+            NSLayoutConstraint.activate([
+                coverageLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
+                coverageLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+                coverageLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+                coverageLabel.heightAnchor.constraint(equalToConstant: 132)
+            ])
+        }
     }
     
     private func setupRoomCaptureView() {
@@ -106,12 +127,17 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         roomCaptureView?.captureSession.run(configuration: roomCaptureSessionConfig)
         if captureSparseFrames {
             do {
-                sparseRecorder = try SparseFrameRecorder()
+                sparseRecorder = try SparseFrameRecorder(profile: captureRoomPass ? .roomPass : .sparse)
+                sparseRecorder?.onProgress = { [weak self] text in self?.coverageLabel.text = text }
                 sparseRecorder?.start(session: roomCaptureView.captureSession.arSession)
-                recordDiagnostic("Sparse experiment enabled: every 2 seconds, at most 20 frames / 45 seconds")
+                recordDiagnostic(captureRoomPass ? "Room pass enabled: 2fps, 180 seconds, last 30 seconds held out" : "Sparse experiment enabled: every 2 seconds, at most 20 frames / 45 seconds")
             } catch {
                 recordDiagnostic("Sparse experiment unavailable; RoomPlan continues: \(error.localizedDescription)")
             }
+        }
+        if captureRoomPass {
+            probeTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.recordDiagnostic("Room pass") }
+            roomPassEndTimer = Timer.scheduledTimer(withTimeInterval: 180, repeats: false) { [weak self] _ in self?.stopSession() }
         }
         #if DEBUG
         if runBoundedProbe {
@@ -131,6 +157,7 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         startupDiagnosticTimer?.invalidate()
         probeTimer?.invalidate()
         probeEndTimer?.invalidate()
+        roomPassEndTimer?.invalidate()
         sparseRecorder?.stop(reason: isDiscarding ? "scan discarded" : "scan completed")
         guard isScanning else { return }
         isScanning = false
@@ -177,6 +204,7 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
             self.doneButton?.isEnabled = true
             self.activityIndicator?.stopAnimating()
             self.recordDiagnostic("Processed room: \(processedResult.walls.count) walls, \(processedResult.objects.count) objects")
+            if self.captureRoomPass { self.exportResults(UIButton()) }
             #if DEBUG
             if self.runBoundedProbe && ProcessInfo.processInfo.arguments.contains("--probe-auto-export") { self.exportResults(UIButton()) }
             #endif
@@ -196,6 +224,7 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         startupDiagnosticTimer?.invalidate()
         probeTimer?.invalidate()
         probeEndTimer?.invalidate()
+        roomPassEndTimer?.invalidate()
         sparseRecorder?.stop(reason: "RoomPlan capture error: \(error.localizedDescription)")
         hasReportedCaptureError = true
         isScanning = false
@@ -344,6 +373,11 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
                     self.exportedArchive = archiveURL
                     self.finishExport()
                     self.recordDiagnostic("Saved package: \(archiveURL.lastPathComponent)")
+                    if self.captureRoomPass {
+                        self.coverageLabel.text = "Room saved · RGB-D + RoomPlan\nYou can close this scan. Keep the package for transfer."
+                        self.doneButton?.title = "Room saved"
+                        return
+                    }
                     #if DEBUG
                     if self.runBoundedProbe && ProcessInfo.processInfo.arguments.contains("--probe-auto-export") {
                         self.showError(title: "Probe saved", message: "The bounded scan package is saved locally. You can put the phone down.")

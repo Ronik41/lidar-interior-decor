@@ -25,13 +25,18 @@
     </aside>
     <section class="workspace" aria-label="Room review workspace">
       <div class="plan-heading"><div><p class="eyebrow" id="view-eyebrow">3D ROOM · METERS</p><h2 id="view-title">A feel for the space</h2></div><div class="view-tabs" role="group" aria-label="View mode"><button id="view-3d" class="active" aria-pressed="true">3D room</button><button id="view-2d" aria-pressed="false">2D plan</button></div></div>
+      <div id="capture-tools" hidden>
+        <div class="capture-line"><strong>As scanned</strong><select id="scan-layer" aria-label="3D layer"><option value="mesh">Photographic RGB-D mesh</option><option value="splat">Gaussian splat candidate</option><option value="roomplan">Editable RoomPlan</option></select><label><input id="roomplan-overlay" type="checkbox"> RoomPlan overlay</label></div>
+        <div class="capture-line"><select id="capture-viewpoint" aria-label="Walkthrough viewpoint"></select><button id="go-viewpoint">Go to view</button><button id="walk-mode" class="active">Walk</button><button id="orbit-mode">Orbit</button><button id="expand-room" aria-pressed="false">Expand 3D</button></div>
+        <p id="capture-provenance"></p>
+      </div>
       <div id="scene-tools"><label><input type="checkbox" id="cutaway" checked> Cutaway walls</label><label><input type="checkbox" id="show-excluded" checked> Excluded outlines</label><button id="focus-3d">Focus selected</button><button id="fit-3d">Fit room</button></div>
       <div id="scene-wrap"><div class="scene-caption">Bounding-box furniture · drag to orbit · scroll to zoom</div><div id="scene"></div><div id="scene-error" hidden></div></div>
       <div class="overhead-heading"><span>LINKED OVERHEAD <small>layout &amp; dimensions</small></span><div class="zoom"><button id="zoom-out" aria-label="Zoom plan out">−</button><button id="zoom-in" aria-label="Zoom plan in">+</button><button id="fit">Fit plan</button></div></div>
       <div id="plan-wrap"><svg id="plan" role="img" aria-label="RoomPlan floor plan, one consistent meter scale" preserveAspectRatio="xMidYMid meet"></svg></div>
       <div class="legend"><span><i class="wall"></i>Wall</span><span><i class="door"></i>Door</span><span><i class="opening"></i>Opening</span><span><i class="keep"></i>Keep</span><span><i class="remove"></i>Remove</span><span><i class="unsure"></i>Unsure</span></div>
       <div class="color-key"><span><i class="observed"></i>Photo-supported, approximate</span><span><i class="chosen"></i>User choice</span><span><i class="unknown"></i>Hatched = color unknown</span></div>
-      <div class="plan-note"><strong>RoomPlan estimates, not a photorealistic room.</strong> Full-height planes; no measured wall thickness or door swings. Cutaway fades near walls to see inside. The plan helps inspect clearances; it does not validate fit.</div>
+      <div class="plan-note" id="layer-note"><strong>RoomPlan estimates, not a photorealistic room.</strong> Full-height planes; no measured wall thickness or door swings. Cutaway fades near walls to see inside. The plan helps inspect clearances; it does not validate fit.</div>
       <div class="summary" id="summary"></div>
     </section>
     <aside class="inspector" id="inspector"><p>Select an element to inspect its dimensions and source.</p></aside>

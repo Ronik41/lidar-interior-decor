@@ -15,7 +15,7 @@ def extension_hashes(manifest):
             or extension['index_file'] != 'Frames.json'):
         raise ValueError('Unsupported sparse frame extension')
     hashes = extension['sha256']
-    if (not isinstance(hashes,dict) or not 1 <= len(hashes) <= 61 or 'Frames.json' not in hashes
+    if (not isinstance(hashes,dict) or not 1 <= len(hashes) <= 1201 or 'Frames.json' not in hashes
             or any(name != 'Frames.json' and not re.fullmatch(r'Frame-\d{4}\.(jpg|depth\.f32|confidence\.u8)',name) for name in hashes)):
         raise ValueError('Invalid sparse frame file inventory')
     return hashes
@@ -34,12 +34,17 @@ def validate_sparse(source, manifest):
     index=json.loads((source/'Frames.json').read_text())
     if not isinstance(index,dict) or type(index.get('schema_version')) is not int or index['schema_version']!=1:
         raise ValueError('Unsupported sparse frame index')
+    profile=index.get('capture_profile','sparse-v1')
+    if profile not in ('sparse-v1','room-pass-v1'): raise ValueError('Unsupported capture profile')
+    limit=400 if profile=='room-pass-v1' else 20
     frames=index.get('frames')
-    if not isinstance(frames,list) or len(frames)>20 or type(index.get('saved_count')) is not int or index['saved_count']!=len(frames):
+    if not isinstance(frames,list) or len(frames)>limit or type(index.get('saved_count')) is not int or index['saved_count']!=len(frames):
         raise ValueError('Invalid sparse frame count')
     used={'Frames.json'};previous=-math.inf
     for frame in frames:
         if not isinstance(frame,dict):raise ValueError('Invalid sparse frame record')
+        if profile=='room-pass-v1' and frame.get('capture_phase') not in ('train','held_out'):
+            raise ValueError('Room pass requires capture-time train/held-out designation')
         timestamp=frame.get('timestamp_seconds')
         if type(timestamp) not in (int,float) or not math.isfinite(timestamp) or timestamp<=previous:
             raise ValueError('Sparse timestamps must be finite, unique and increasing')

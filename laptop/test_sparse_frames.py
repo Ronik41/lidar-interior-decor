@@ -73,3 +73,10 @@ class SparseFrameTests(unittest.TestCase):
             (self.scan/name).write_bytes(original);self.hashes[name]=old;self.frame[key]=old
         self.frame['depth_intrinsics_column_major'][0]=500;self.write_index()
         with self.assertRaisesRegex(ValueError,'intrinsics'):validate(self.scan)
+
+    def test_room_pass_requires_explicit_capture_phase_and_honors_sparse_limit(self):
+        self.index['capture_profile']='room-pass-v1';self.write_index()
+        with self.assertRaisesRegex(ValueError,'designation'):validate(self.scan)
+        self.frame['capture_phase']='held_out';self.write_index();validate(self.scan)
+        self.index['capture_profile']='unbounded';self.write_index()
+        with self.assertRaisesRegex(ValueError,'profile'):validate(self.scan)

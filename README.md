@@ -1,15 +1,17 @@
-# Room scan → 3D room review
+# Room scan → photographic walkthrough + editable plan
 
 A local, single-user RoomPlan prototype continued from [Apple's sample](https://developer.apple.com/documentation/roomplan/create-a-3d-model-of-an-interior-room-by-guiding-the-user-through-an-ar-experience). The sample license is retained in `LICENSE.txt`. One room only; no design generation, shopping, accounts in the app, or cloud backend.
 
-## Open the 3D room review editor
+## Open the room walkthrough
 
 ```sh
 cd "/Users/ronikatch/Documents/ChatGPT/LIDAR interior decor"
-python3 laptop/edit_room.py
+./laptop/walkthrough.command
 ```
 
-This verifies the existing imported room and opens **Room Review**, a local, 3D-first editor. Keep Terminal running; **Ctrl-C** stops it. Python's standard library serves on `127.0.0.1`; a pinned local copy of Three.js renders the model. No npm installation, cloud service, or runtime internet connection is needed. WebGL is required for 3D; the 2D editor remains available when WebGL cannot start.
+This opens the locally registered **As scanned** reconstruction with the separate editable RoomPlan layer and linked plan. See [RECONSTRUCTION_STATUS.md](RECONSTRUCTION_STATUS.md) for the actual device run, held-out comparison, commands and quality limits. Use the layer menu to compare the photographic mesh, Gaussian candidate and editable geometry. The original review-only room remains available with `python3 laptop/edit_room.py scans/0e996296-89b4-4e1e-ae15-9d082211006d`. Keep Terminal running; **Ctrl-C** stops it. Python's standard library serves on `127.0.0.1`; a pinned local copy of Three.js renders the model. No npm installation, cloud service, or runtime internet connection is needed for viewing. Reconstruction uses a separate optional Python environment and local Brush binary. WebGL is required for 3D; the 2D editor remains available when WebGL cannot start.
+
+The following controls describe the **Editable RoomPlan** layer; the As scanned view additionally has Walk/Orbit, captured viewpoints, and Expand 3D.
 
 - **3D room:** drag to orbit, scroll/pinch to zoom, Shift-drag or right-drag to pan. **Fit room** restores the overview; **Focus selected** inspects an element. Arrow keys and +/− work when the canvas has focus. **Cutaway walls** fades near walls while retaining full-height geometry. Turn it off to inspect enclosure. Objects are explicit bounding-box proxies, not photorealistic furniture.
 - **Linked overhead:** the 2D plan stays beneath the model. **2D plan** expands it for layout, estimated dimensions, and clearance inspection. Select geometry, a 3D code label, or an inventory item: both views highlight the same source ID and share one inspector. The inventory resolves overlapping footprints. Plan **+ / −**, drag, and **Fit plan** retain their original behavior.
@@ -63,7 +65,7 @@ On the phone, choose **Sparse RGB + depth experiment** instead of **Start Scanni
 
 Each accepted sample takes the RGB image, `sceneDepth`, depth-confidence map, timestamp, camera-to-world pose, and camera intrinsics from the **same ARFrame**. A background serial writer holds at most one frame. Non-normal tracking, absent depth/confidence, duplicate timestamps, or a busy writer cause skips. Serious/critical heat or an encoding pass over 750 ms stops sampling. The experiment never runs another ARSession, changes RoomPlan's configuration/frame semantics, or replaces its ARSession delegate. Optional sidecar export failures fall back to the working core scan package.
 
-The extension keeps the core **manifest schema 1** and core `sha256` inventory unchanged. Optional `sparse_frames` metadata contains its own version, index filename (`Frames.json`), and SHA-256 map. New importers validate and preserve both inventories; the original Milestone 1 importer can still read the core payload but drops optional frames, so use the updated importer for archiving new packages. Old packages without this extension continue to import unchanged.
+The extension keeps the core **manifest schema 1** and core `sha256` inventory unchanged. Optional `sparse_frames` metadata contains its own version, index filename (`Frames.json`), and SHA-256 map. New importers validate and preserve both inventories; the original Milestone 1 importer can still read the 20-frame sparse package core payload but drops optional frames, so use the updated importer for archiving new packages. Old packages without this extension continue to import unchanged. The new three-minute `room-pass-v1` profile requires the updated importer because its denser ZIP exceeds the old reader’s 100-entry bound.
 
 | Optional file | Contents |
 | --- | --- |
@@ -134,6 +136,16 @@ xcodebuild -project RoomPlanExampleApp.xcodeproj -scheme RoomPlanExampleApp \
   -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
 ```
 
-All 40 Python tests pass: 12 original importer tests, 14 original editor tests, 8 review/provenance/legacy-revision tests, and 6 sparse RGB-D package tests. Run `node laptop/test_scene.mjs` for wall aperture cuts and camera projection checks. Their fixture geometry is synthetic; physical capture evidence is reported separately and does not establish dimensional accuracy.
+The optional reconstruction environment passes **51 Python tests** with `.venv-reconstruction/bin/python -m unittest discover -s laptop -v`, covering the importer, editor/revisions, sparse and guided capture contracts, reconstruction assets, metric fusion, train-only pose overrides and identical-camera comparison. The standard-library test run skips tests requiring that optional environment. Run `node laptop/test_scene.mjs` for wall aperture cuts and camera projection checks. Their fixture geometry is synthetic; physical capture evidence is reported separately and does not establish dimensional accuracy.
 
 `laptop/test_archive.swift` can be compiled alongside `RoomPlanExampleApp/ScanArchive.swift` to exercise the exact native archive helper on macOS. Local test artifacts and logs belong in ignored `validation/`; app build products and the cached Mac viewer are also ignored.
+
+## Photographic room reconstruction
+
+The follow-up [pose-refinement experiment](POSE_REFINEMENT_STATUS.md) diagnoses blur and compares one registered rebuild at identical held-out camera poses. The original 6,000-step result remains the preserved baseline. [CAPTURE_GUIDE.md](CAPTURE_GUIDE.md) describes the new standing-position and movement coaching; its native build is verified, but it has not yet been physically recaptured.
+
+The one-room reconstruction work and actual device evidence are documented in [RECONSTRUCTION_STATUS.md](RECONSTRUCTION_STATUS.md). The local source-only review/capture checkpoint is `ff6c088`; nothing was pushed.
+
+Open the locally registered reconstruction with `./laptop/walkthrough.command`, or run `python3 laptop/edit_room.py scans/SCAN_ID --reconstruction reconstructions/room-pass`. “As scanned” is a photographic reconstruction from the new room pass. “Editable RoomPlan” remains a separate, meter-scale layer for dimensions, review decisions, and the linked 2D plan. The prior scan and all its revisions remain available by passing their original path to the editor.
+
+Use the viewpoint menu to move around the captured room. In Walk mode drag to look, use W/A/S/D to move and Q/E to move down/up; Orbit mode retains orbit/pan/zoom. Movement is inspection only and does not enforce physical collisions. Dark gaps and grey mesh patches are unknown. Photograph-derived appearance is not a paint measurement.

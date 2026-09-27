@@ -1,0 +1,6 @@
+open3d==0.20.0
+numpy==2.5.3
+Pillow==12.3.0
+scipy==1.18.1
+scikit-image==0.26.0
+opencv-python-headless==4.13.0.92

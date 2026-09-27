@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import mimetypes
 import secrets
 import sys
 import threading
@@ -13,13 +14,14 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from design_input import DesignStore
+from reconstruction_assets import ReconstructionAssets
 from import_scan import import_scan, read_object
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = Path(__file__).with_name("editor")
 
 
-def make_server(store, initial_document, initial_filename, port=0):
+def make_server(store, initial_document, initial_filename, port=0, reconstruction=None):
     token = secrets.token_urlsafe(32)
     lock = threading.Lock()
 
@@ -34,7 +36,7 @@ def make_server(store, initial_document, initial_filename, port=0):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
             self.end_headers()
             self.wfile.write(body)
 
@@ -59,6 +61,13 @@ def make_server(store, initial_document, initial_filename, port=0):
                     data = store.payload(initial_document, initial_filename)
                     data["token"] = token
                     self.respond(200, data)
+                elif route.path == "/api/reconstruction":
+                    self.respond(200, reconstruction.payload() if reconstruction else None)
+                elif route.path.startswith("/reconstruction/") and reconstruction:
+                    name=route.path.removeprefix("/reconstruction/")
+                    asset=reconstruction.files.get(name)
+                    if asset is None: self.respond(404, {"error":"Unlisted reconstruction asset"})
+                    else: self.respond(200, asset.read_bytes(), mimetypes.guess_type(name)[0] or "application/octet-stream")
                 elif route.path == "/api/open":
                     name = parse_qs(route.query).get("file", [""])[0]
                     self.respond(200, store.payload(store.load(store.version_path(name)), name))
@@ -68,7 +77,7 @@ def make_server(store, initial_document, initial_filename, port=0):
                 elif route.path == "/reference.jpg" and store.manifest["rgb_reference_available"]:
                     store.verify()
                     self.respond(200, (store.scan / "Reference.jpg").read_bytes(), "image/jpeg")
-                elif route.path in ("/", "/app.js", "/style.css", "/scene.js", "/reference.js", "/vendor/three.module.js", "/vendor/three.core.js", "/vendor/OrbitControls.js"):
+                elif route.path in ("/", "/app.js", "/style.css", "/scene.js", "/reference.js", "/vendor/three.module.js", "/vendor/three.core.js", "/vendor/OrbitControls.js", "/vendor/GLTFLoader.js", "/vendor/BufferGeometryUtils.js", "/vendor/SkeletonUtils.js", "/vendor/Pass.js", "/vendor/spark.module.js"):
                     name = "index.html" if route.path == "/" else route.path[1:]
                     mime = "text/javascript; charset=utf-8" if name.endswith(".js") else "text/css; charset=utf-8" if name.endswith(".css") else "text/html; charset=utf-8"
                     self.respond(200, (ASSETS / name).read_bytes(), mime)
@@ -110,6 +119,7 @@ def main():
     parser.add_argument("source", nargs="?", type=Path, help="Imported scan folder, original ZIP, or saved .design.json")
     parser.add_argument("--port", type=int, default=0, help="Local port (default: any free port)")
     parser.add_argument("--no-open", action="store_true", help="Print the URL without opening a browser")
+    parser.add_argument("--reconstruction", type=Path, help="Verified local As scanned asset folder from the same capture")
     args = parser.parse_args()
     try:
         source = args.source.expanduser().resolve() if args.source else None
@@ -140,7 +150,8 @@ def main():
                 scan = import_scan(source, ROOT / "scans")
             store = DesignStore(scan, ROOT / "design-inputs")
             filename = None
-        server = make_server(store, initial or store.new(), filename, args.port)
+        reconstruction=ReconstructionAssets(args.reconstruction,store) if args.reconstruction else None
+        server = make_server(store, initial or store.new(), filename, args.port,reconstruction)
         url = f"http://127.0.0.1:{server.server_port}"
         print(f"Verified scan: {store.source['scan_id']}\nEditor: {url}\nSaves: {store.output}\nKeep this Terminal running. Ctrl-C stops the editor.", flush=True)
         if not args.no_open:

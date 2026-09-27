@@ -25,3 +25,10 @@ xcuserdata/
 
 **/*.playground/playground.xcworkspace/xcshareddata/*
 !**/*.playground/playground.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+
+# Local reconstruction runtimes and private outputs
+.venv*/
+.local-tools/
+reconstructions/
+# Brush shader/autotuning cache
+target/

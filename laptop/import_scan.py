@@ -112,7 +112,7 @@ def package_folder(source: Path):
         root = Path(temporary)
         with zipfile.ZipFile(source) as archive:
             members = archive.infolist()
-            if len(members) > 100 or sum(m.file_size for m in members) > MAX_PACKAGE_BYTES:
+            if len(members) > 1250 or sum(m.file_size for m in members) > MAX_PACKAGE_BYTES:
                 raise ValueError("ZIP exceeds the single-room prototype limit")
             seen = set()
             for member in members:
