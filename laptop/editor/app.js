@@ -4,7 +4,8 @@ import { photoProjection } from './reference.js';
 const $ = id => document.getElementById(id);
 const NS = "http://www.w3.org/2000/svg";
 let state, token, selected, filter = "all", dirty = false, formDirty = false, busy = false, view;
-let scene, currentIssue=null, showSkipped=false, mode='3d';
+let scene, currentIssue=null, showSkipped=false, mode='3d', placement=null;
+const activeProposal = () => state.proposals.find(p=>p.id===selected);
 const pretty = value => (value || "Unknown").replace(/([a-z])([A-Z])/g, "$1 $2");
 const meters = value => value == null ? "missing" : `${value.toFixed(2)} m`;
 function node(tag, text, attrs = {}) {
@@ -39,7 +40,7 @@ async function action(fn) {
 function activeElement() { return state.elements.find(e => e.source.identifier === selected); }
 function choose(id) {
   if (busy || (formDirty && !confirm("Discard unapplied changes to this element?"))) return;
-  selected = id; formDirty = false; renderInventory(); renderPlan(); renderInspector();scene?.highlight(id, currentIssue?.elements || []);
+  cancelPlacement();selected = id; formDirty = false; renderInventory(); renderPlan(); renderInspector();scene?.highlight(id, currentIssue?.elements || []);
 }
 function renderInventory() {
   const root = $("inventory"); root.replaceChildren();
@@ -60,6 +61,13 @@ function renderInventory() {
     }
   }
   if (!root.children.length) root.append(node("p", "No matching elements.", {class:"muted"}));
+  const proposed=$('proposals');proposed.replaceChildren();
+  for(const p of state.proposals){
+    const b=node('button',`${p.code} · ${p.model.name}`,{class:`proposal-row${selected===p.id?' selected':''}`,'aria-pressed':String(selected===p.id)});
+    b.onclick=()=>choose(p.id);proposed.append(b);
+  }
+  $('proposal-count').textContent=state.proposals.length;
+  if(!state.proposals.length)proposed.append(node('p','No proposed furniture yet.',{class:'muted'}));
 }
 function fit() {
   const [x0,y0,x1,y1] = state.bounds;
@@ -100,7 +108,7 @@ function renderPlan() {
         g.append(svg("line",{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:"#b66c59","stroke-width":.012}));
       }
     }
-    g.addEventListener("click",() => { if (!dragMoved) choose(e.source.identifier); });
+    g.addEventListener("click",() => { if (!dragMoved && !placement) choose(e.source.identifier); });
     g.addEventListener("keydown",event => {if (event.key === "Enter" || event.key === " ") {event.preventDefault(); choose(e.source.identifier);}});
     root.append(g);
   }
@@ -131,6 +139,16 @@ function renderPlan() {
       root.append(svg("text",{x:cx,y:cy+offset,transform:`rotate(${angle} ${cx} ${cy})`,class:"plan-label","text-anchor":"middle","font-size":textSize},label));
     }
   }
+  for(const p of state.proposals){
+    const chosen=p.id===selected,g=svg('g',{'data-proposal':p.id,tabindex:0,role:'button','aria-label':`${p.code} ${p.model.name} proposal footprint`,'aria-pressed':String(chosen)});
+    g.append(svg('polygon',{points:p.geometry.points.map(pt=>pt.join(',')).join(' '),fill:'#38c4d4','fill-opacity':.30,stroke:p.warnings.length?'#bd6825':'#007d96','stroke-width':chosen?.04:.022}));
+    const [cx,cy]=p.center,angle=(p.anchor.yaw_degrees*Math.PI/180)+state.document.plan_rotation_radians;
+    // Heading points toward model local +Z, the open front of this chair.
+    g.append(svg('line',{x1:cx,y1:cy,x2:cx+Math.sin(angle)*p.dimensions_m[2]*.65,y2:cy+Math.cos(angle)*p.dimensions_m[2]*.65,stroke:'#007d96','stroke-width':.025}));
+    g.append(svg('text',{x:cx,y:cy+textSize*.3,'font-size':textSize,'text-anchor':'middle',class:'plan-label'},p.code));
+    g.addEventListener('click',()=>{if(!dragMoved && !placement)choose(p.id);});
+    g.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();choose(p.id);}});root.append(g);
+  }
   const [x0,y0,x1,y1] = state.bounds;
   root.append(svg("line",{x1:x0,y1:y1+.45,x2:x0+1,y2:y1+.45,stroke:"#576d58","stroke-width":.018}));
   for (const x of [x0,x0+1]) root.append(svg("line",{x1:x,y1:y1+.39,x2:x,y2:y1+.51,stroke:"#576d58","stroke-width":.018}));
@@ -147,6 +165,7 @@ function field(form, label, id, value, hint, type="text") {
   wrap.append(input);if(hint) wrap.append(node("small",hint));form.append(wrap);return input;
 }
 function renderInspector() {
+  if(activeProposal()){renderProposalInspector(activeProposal());return;}
   const e = activeElement(); const root = $("inspector"); root.replaceChildren();
   if (!e) return;
   root.append(node("p",`${e.kind === "objects" ? "OBJECT" : "STRUCTURE"} ${e.code}`,{class:"eyebrow"}),node("h2",pretty(e.label)));
@@ -198,6 +217,7 @@ function renderInspector() {
   root.append(source);
 }
 async function applyForm() {
+  if(activeProposal()){await applyPlacementForm();return;}
   const form=$("edit-form");if(!form || !formDirty)return;
   if(!form.reportValidity())throw new Error("Check the highlighted field before applying or saving.");
   const e=activeElement(),doc=structuredClone(state.document),edit=doc.elements.find(row=>row.source.identifier===selected);
@@ -263,7 +283,8 @@ function renderStatus() {
 function render() {
   $("source-status").textContent=`✓ Verified scan · ${state.document.source.scan_id.slice(0,8)} · ${state.elements.filter(e=>e.kind==="walls").length} walls · ${state.elements.filter(e=>e.kind==="doors").length} doors · ${state.elements.filter(e=>e.kind==="openings").length} openings · ${state.elements.filter(e=>e.kind==="windows").length} windows detected`;
   $("element-count").textContent=state.elements.length;
-  renderStatus();renderQueue();renderInventory();renderPlan();renderInspector();scene?.update(state,selected);scene?.highlight(selected,currentIssue?.elements || []);
+  if(!activeProposal() && !activeElement())selected=state.proposals[0]?.id||state.elements[0]?.source.identifier;
+  renderCatalog();renderStatus();renderQueue();renderInventory();renderPlan();renderInspector();scene?.update(state,selected);scene?.highlight(selected,currentIssue?.elements || []);
   const select=$("versions");select.replaceChildren(node("option","Saved revisions…",{value:""}));
   for(const name of state.versions)select.append(node("option",name,{value:name}));select.value=state.filename || state.versions.at(-1) || "";
   $("file-path").textContent=state.filename ? `${state.output_directory}/${state.filename}` : `Save location: ${state.output_directory}`;
@@ -277,18 +298,18 @@ $("save").addEventListener("click",()=>action(async()=>{
 $("reopen").addEventListener("click",()=>action(async()=>{
   const name=$("versions").value;if(!name)throw new Error("Save a revision first, then choose it here.");
   if((dirty || formDirty) && !confirm("Discard unsaved changes and reopen this revision?"))return;
-  state=await api(`/api/open?file=${encodeURIComponent(name)}`);dirty=false;formDirty=false;view=null;currentIssue=null;render();message(`Reopened ${name} from disk. Source scan hashes verified.`);
+  cancelPlacement();state=await api(`/api/open?file=${encodeURIComponent(name)}`);dirty=false;formDirty=false;view=null;currentIssue=null;render();message(`Reopened ${name} from disk. Source scan hashes verified.`);
 }));
 $("original").addEventListener("click",()=>action(async()=>{
   if((dirty || formDirty) && !confirm("Discard unsaved changes and return to the original scan?"))return;
-  state=await api("/api/new");dirty=false;formDirty=false;view=null;currentIssue=null;render();message("Original scan loaded. Saved revisions remain available.");
+  cancelPlacement();state=await api("/api/new");dirty=false;formDirty=false;view=null;currentIssue=null;render();message("Original scan loaded. Saved revisions remain available.");
 }));
 $("search").addEventListener("input",renderInventory);
 document.querySelectorAll("[data-filter]").forEach(b=>b.addEventListener("click",()=>{filter=b.dataset.filter;document.querySelectorAll("[data-filter]").forEach(x=>x.classList.toggle("active",x===b));renderInventory();}));
 function zoom(factor){const [x,y,w,h]=view;view=[x+w*(1-factor)/2,y+h*(1-factor)/2,w*factor,h*factor];renderPlan();}
 $("zoom-in").addEventListener("click",()=>zoom(.8));$("zoom-out").addEventListener("click",()=>zoom(1.25));$("fit").addEventListener("click",()=>{fit();renderPlan();});
 let drag=null,dragMoved=false;
-$("plan").addEventListener("pointerdown",event=>{drag={x:event.clientX,y:event.clientY,view:[...view]};dragMoved=false;});
+$("plan").addEventListener("pointerdown",event=>{if(placement)return;drag={x:event.clientX,y:event.clientY,view:[...view]};dragMoved=false;});
 window.addEventListener("pointermove",event=>{
   if(!drag)return;const dx=event.clientX-drag.x,dy=event.clientY-drag.y;
   if(Math.hypot(dx,dy)<4)return;dragMoved=true;
@@ -310,7 +331,12 @@ $('cutaway').onchange=()=>{if(scene){scene.cutaway=$('cutaway').checked;scene.dr
 $('show-excluded').onchange=()=>{if(scene){scene.showExcluded=$('show-excluded').checked;scene.draw();}};
 $('fit-3d').onclick=()=>scene?.fit();$('focus-3d').onclick=()=>scene?.focus(selected);
 $('show-skipped').onclick=()=>{showSkipped=!showSkipped;renderQueue();};
-try { scene=new RoomScene($('scene'),choose); }
+try {
+  scene=new RoomScene($('scene'),choose,commitFloorPlacement,error=>{
+    $('proposal-model-status').hidden=false;$('proposal-model-status').textContent=error;message(error,true);
+  });
+  scene.onViewChange=index=>{$('capture-viewpoint').value=String(index);};
+}
 catch(error) { $('scene-error').hidden=false;$('scene-error').textContent=`3D unavailable: ${error.message}. The linked 2D plan and editor are still available.`; }
 function describeLayer(){
   const mode=scene.layerMode,scanned=mode!=='roomplan';
@@ -332,8 +358,103 @@ $('go-viewpoint').onclick=()=>scene?.goToView(Number($('capture-viewpoint').valu
 $('expand-room').onclick=()=>{const expanded=document.body.classList.toggle('expanded-room');$('expand-room').textContent=expanded?'Show editor':'Expand 3D';$('expand-room').setAttribute('aria-pressed',String(expanded));requestAnimationFrame(()=>scene?.resize());};
 $('walk-mode').onclick=()=>{scene?.setNavigation('walk');describeLayer();};
 $('orbit-mode').onclick=()=>{scene?.setNavigation('orbit');describeLayer();};
+
+function renderCatalog(){
+  const root=$('furniture-catalog');
+  if(root.children.length)return;
+  for(const item of state.furniture_catalog){
+    const card=node('div',null,{class:'catalog-card'});
+    card.append(node('strong',item.name),node('p',`${item.dimensions_m.map(n=>n.toFixed(3)).join(' × ')} m · W / H / D`,{class:'muted'}),node('p','Local detailed model · CC0 · authored dimensions',{class:'muted'}));
+    const add=node('button','Place chair on floor',{class:'primary',id:'place-chair'});
+    add.onclick=()=>action(async()=>{await applyForm();beginPlacement({asset:item});});
+    card.append(add);root.append(card);
+  }
+}
+function cancelPlacement(){
+  placement=null;scene?.setPlacement(null);$('placement-bar').hidden=true;$('plan').classList.remove('placing');
+}
+function beginPlacement(tool){
+  if(!state.placement_floors.length){message('No usable horizontal RoomPlan floor is available for anchoring.',true);return;}
+  placement=tool;currentIssue=null;
+  const item=tool.asset||activeProposal().model;
+  scene?.setPlacement({dimensions_m:item.dimensions_m,yaw_degrees:tool.id?activeProposal().anchor.yaw_degrees:0});
+  $('placement-bar').hidden=false;$('placement-instruction').textContent=tool.id?'Click a new floor position in 3D or the linked plan.':'Click open floor in 3D or the linked plan to place the chair.';
+  $('plan').classList.add('placing');message('Cyan outline previews the footprint. Floor picks do not detect photographic obstacles; inspect the estimates after placing.');
+}
+$('cancel-placement').onclick=cancelPlacement;
+window.addEventListener('keydown',event=>{if(event.key==='Escape')cancelPlacement();});
+async function commitFloorPlacement(hit){
+  if(!placement||busy)return;
+  const tool=placement;
+  await action(async()=>{
+    const doc=structuredClone(state.document);
+    let p=tool.id?doc.proposals.find(p=>p.id===tool.id):null;
+    if(!p){
+      p={id:`proposal-${crypto.randomUUID()}`,asset_id:tool.asset.id,asset_sha256:tool.asset.sha256,dimensions_m:tool.asset.dimensions_m,anchor:{yaw_degrees:0}};
+      doc.proposals.push(p);
+    }
+    Object.assign(p.anchor,{floor_identifier:hit.floor_identifier,x_m:hit.x_m,z_m:hit.z_m});
+    const next=await api('/api/preview',{document:doc,filename:state.filename});
+    cancelPlacement();state=next;selected=p.id;dirty=true;formDirty=false;render();
+    message('Proposal placed in both views. Captured furniture is unchanged. Save a revision to keep the placement.');
+  });
+}
+function pointInPolygon(p,poly){
+  let inside=false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const a=poly[i],b=poly[j];
+    if((a[1]>p[1])!==(b[1]>p[1]) && p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])inside=!inside;
+  }
+  return inside;
+}
+$('plan').addEventListener('click',event=>{
+  if(!placement)return;
+  const pt=new DOMPoint(event.clientX,event.clientY).matrixTransform($('plan').getScreenCTM().inverse());
+  const floor=state.placement_floors.find(f=>pointInPolygon([pt.x,pt.y],f.plan_points));
+  if(!floor){message('Choose a point inside the estimated RoomPlan floor.',true);return;}
+  const a=state.document.plan_rotation_radians,c=Math.cos(a),s=Math.sin(a);
+  commitFloorPlacement({floor_identifier:floor.identifier,x_m:c*pt.x-s*pt.y,z_m:s*pt.x+c*pt.y});
+});
+function renderProposalInspector(p){
+  const root=$('inspector');root.replaceChildren();
+  root.append(node('p',`PROPOSED FURNITURE · ${p.code}`,{class:'eyebrow'}),node('h2',p.model.name),node('p','Cyan footprint = your proposal. Existing chairs and sofa remain in the captured room.',{class:'proposal-notice'}));
+  const facts=node('div',null,{class:'evidence-facts'});
+  facts.append(node('p',`${p.dimensions_m.map(n=>n.toFixed(3)).join(' × ')} m · width / height / depth`),node('p',p.model.dimension_basis),node('p',`Bottom anchored to ${p.floor_code} · Y ${p.position_m[1].toFixed(3)} m`));root.append(facts);
+  const warnings=node('div',null,{class:`placement-warnings${p.warnings.length?' conflict':''}`,role:'status',id:'placement-warnings'});
+  warnings.append(node('strong',p.warnings.length?'Check this placement':'No estimated overlap detected'));
+  for(const warning of p.warnings)warnings.append(node('p',warning));
+  warnings.append(node('p','Estimates only, not verified clearances. Missing detections, doors and splat misalignment can hide obstructions.'));root.append(warnings);
+  const form=node('form',null,{id:'placement-form'}),dims=node('div',null,{class:'dimensions'});
+  for(const [key,label,value] of [['x','Scan X (m)',p.anchor.x_m],['z','Scan Z (m)',p.anchor.z_m],['yaw','Heading (°)',p.anchor.yaw_degrees]]){
+    const input=field(dims,label,`place-${key}`,Number(value.toFixed(4)),null,'number');input.min=key==='yaw'?'-360':'-100';input.max=key==='yaw'?'360':'100';input.step='any';input.required=true;
+  }
+  form.append(dims,node('p','X / Z use the original scan axes. Heading rotates around vertical; model size stays fixed.',{class:'muted'}));
+  const buttons=node('div',null,{class:'form-buttons'});buttons.append(node('button','Apply placement',{type:'submit',class:'primary'}));
+  const move=node('button','Move on floor',{type:'button'});move.onclick=()=>action(async()=>{await applyPlacementForm();beginPlacement({id:p.id});});buttons.append(move);form.append(buttons);
+  const nudge=node('div',null,{class:'nudge-controls'});
+  for(const [label,key,delta] of [['X −10 cm','x',-.1],['X +10 cm','x',.1],['Z −10 cm','z',-.1],['Z +10 cm','z',.1],['Rotate −15°','yaw',-15],['Rotate +15°','yaw',15]]){
+    const b=node('button',label,{type:'button'});b.onclick=()=>action(async()=>{
+      if(!form.reportValidity())return;
+      const input=$(`place-${key}`);let value=Number(input.value)+delta;if(key==='yaw')value=((value+180)%360+360)%360-180;input.value=value.toFixed(4);formDirty=true;await applyPlacementForm();
+    });nudge.append(b);
+  }
+  form.append(nudge);form.oninput=()=>{formDirty=true;renderStatus();};form.onsubmit=event=>{event.preventDefault();action(async()=>{await applyPlacementForm();message('Placement updated in 3D and 2D. Save to keep it.');});};root.append(form);
+  const focus=node('button','Inspect chair in 3D',{id:'inspect-proposal'});focus.onclick=()=>{setMode('3d');scene?.focus(p.id);};
+  const remove=node('button','Remove proposal',{id:'remove-proposal',class:'danger'});remove.onclick=()=>action(async()=>{
+    const doc=structuredClone(state.document);doc.proposals=doc.proposals.filter(x=>x.id!==p.id);
+    state=await api('/api/preview',{document:doc,filename:state.filename});cancelPlacement();selected=null;formDirty=false;dirty=true;render();message('Proposal removed from this draft. Captured furniture and saved revisions remain unchanged.');
+  });root.append(focus,remove);
+  const source=node('div',null,{class:'source-details'});source.append(node('strong','Model identity & source'),node('p',`${p.model.author} · ${p.model.license}`),node('a','Khronos source & license',{href:p.model.source_url,target:'_blank',rel:'noopener'}),node('code',p.id),node('code',`Asset SHA-256: ${p.asset_sha256}`));root.append(source);
+}
+async function applyPlacementForm(){
+  if(!formDirty)return;
+  const form=$('placement-form');if(!form?.reportValidity())throw new Error('Check the placement values.');
+  const doc=structuredClone(state.document),p=doc.proposals.find(p=>p.id===selected);
+  Object.assign(p.anchor,{x_m:Number($('place-x').value),z_m:Number($('place-z').value),yaw_degrees:Number($('place-yaw').value)});
+  state=await api('/api/preview',{document:doc,filename:state.filename});dirty=true;formDirty=false;render();
+}
 action(async()=>{
-  state=await api('/api/state');token=state.token;selected=state.elements.find(e=>e.kind==='objects')?.source.identifier||state.elements[0]?.source.identifier;render();
+  state=await api('/api/state');token=state.token;selected=state.proposals[0]?.id||state.elements.find(e=>e.kind==='objects')?.source.identifier||state.elements[0]?.source.identifier;render();
   const reconstruction=await api('/api/reconstruction');
   if(reconstruction && scene){
     $('capture-tools').hidden=false;$('capture-provenance').textContent=reconstruction.provenance;

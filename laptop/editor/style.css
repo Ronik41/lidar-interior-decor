@@ -11,3 +11,13 @@ main{height:calc(100vh - 151px);min-height:780px;grid-template-columns:245px min
 
 .expanded-room main{grid-template-columns:1fr;height:auto;min-height:0}.expanded-room aside{display:none}.expanded-room .workspace{min-height:0}.expanded-room #scene-wrap{height:calc(100vh - 295px);min-height:420px;flex:none}.expanded-room .workspace:not(.plan-mode) #plan-wrap,.expanded-room .workspace:not(.plan-mode) .overhead-heading,.expanded-room .legend,.expanded-room .summary,.expanded-room .plan-note{display:none}
 #capture-tools.has-benchmark #capture-provenance{min-height:3em}
+
+/* Manual proposals are independent of captured detections and review decisions. */
+.proposal-section{padding-bottom:18px;margin-bottom:18px;border-bottom:1px solid var(--line)}
+.catalog-card{padding:12px;margin:10px 0;border:1px solid #b8dbe0;border-radius:8px;background:#edf7f8;font-size:12px}.catalog-card button{margin-top:10px;width:100%;font-size:12px}.catalog-card .muted{font-size:10px}
+.proposal-row{display:block;width:100%;text-align:left;font-size:12px;margin:6px 0}.proposal-row.selected{border-color:#04859c;background:#dff3f5}.proposal-notice{padding:10px;background:#e4f4f5;border-left:3px solid #04859c;font-size:12px;line-height:1.5}
+.placement-warnings{padding:10px;background:#eef4ec;border:1px solid #cfddcc;border-radius:7px;font-size:11px;line-height:1.5;margin:12px 0}.placement-warnings p{margin-top:7px}.placement-warnings.conflict{background:#fff1df;border-color:#d5a462;color:#794616}
+.nudge-controls{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:10px 0 16px}.nudge-controls button{font-size:11px;padding:7px 4px}.danger{color:#a54536;margin-left:6px}#inspect-proposal,#remove-proposal{font-size:11px;padding:9px 7px}
+#placement-bar:not([hidden]){display:flex;justify-content:space-between;align-items:center;gap:10px;background:#dbf3f5;padding:9px;border-radius:7px;margin:7px 0;font-size:12px}#placement-bar button{font-size:11px;white-space:nowrap}#plan.placing,#plan.placing [data-element]{cursor:crosshair}#plan [data-proposal]{cursor:pointer}.legend .proposal-swatch{background:#b5edf0;border-color:#04859c}
+/* Leave room for the entire linked plan below the walkthrough; do not clip it. */
+@media(min-width:1051px){body:not(.expanded-room) main:has(.workspace:not(.plan-mode) #capture-tools:not([hidden])){min-height:970px}}

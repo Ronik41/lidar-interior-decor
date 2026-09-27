@@ -2,6 +2,31 @@
 
 A local, single-user RoomPlan prototype continued from [Apple's sample](https://developer.apple.com/documentation/roomplan/create-a-3d-model-of-an-interior-room-by-guiding-the-user-through-an-ar-experience). The sample license is retained in `LICENSE.txt`. One room only; no design generation, shopping, accounts in the app, or cloud backend.
 
+## Manual furniture placement
+
+Open the second guided-route room with `./laptop/new_capture.command`. Choose
+**Place chair on floor**, click open floor in 3D or the linked plan, then use the
+shared proposal inspector to move/rotate, check estimated overlaps, or remove the
+chair. **Save new revision** and **Reopen** preserve the same placement. Existing
+furniture remains visible in the splat; this prototype does not replace it.
+
+The bundled detailed CC0 chair has fixed authored metre dimensions and a
+[documented source](laptop/editor/models/README.md). Its cyan footprint and
+proposal inspector distinguish it from captured furniture. W/A/S/D walking and
+captured viewpoints remain available. Warnings are estimates, not verified
+clearances; close views can show splat fragments across the legs/floor contact.
+
+The saved real-room demonstration opens with:
+
+```sh
+./laptop/furniture.command revision-0002.design.json
+```
+
+Revision 3 separately demonstrates removal. Earlier revisions remain intact.
+See [FURNITURE_PLACEMENT_STATUS.md](FURNITURE_PLACEMENT_STATUS.md) for controls,
+coordinate/revision contracts, screenshots, cold-reopen verification, tests and
+occlusion limits. Private evidence stays under `validation/furniture-placement/`.
+
 ## Open the room walkthrough
 
 ```sh
@@ -40,7 +65,7 @@ ZIPs and external folders still go through the verified importer. Use `--no-open
 
 The original **revision 1** 2D demonstration remains unchanged. **Revision 2** demonstrates a TV label and Keep choice, with no measurement correction. **Revision 3** adds a skipped uncertain-door review and a wall-color override. These are explicitly labeled assistant-entered demonstrations, not the user's final furniture or paint preferences. Start from **Original scan** for a clean review.
 
-New revisions use `roomplan-design-input` **schema 2**, retaining source hashes, IDs, JSON pointers, meter coordinates, and immutable parent filename/SHA-256 links. Schema 1 files still load and upgrade in memory; they are never rewritten. Schema 2 adds `reference_observations`, `reviews`, and separate color/structure-exclusion overrides. The optional private `reference-observations.json` supplies inspected starting colors; saved schema 2 files embed their observations. Back up **both `scans/` and `design-inputs/`**. Raw JSON, USDZ, RGB, metadata, received ZIPs, and earlier revisions remain untouched and Git-ignored.
+New revisions use `roomplan-design-input` **schema 3**, retaining source hashes, IDs, JSON pointers, meter coordinates, and immutable parent filename/SHA-256 links. Schema 1 and 2 files still load and upgrade in memory; they are never rewritten. Schema 3 adds separate furniture `proposals` with asset identity and floor anchors. Schema 2 introduced `reference_observations`, `reviews`, and separate color/structure-exclusion overrides. The optional private `reference-observations.json` supplies inspected starting colors; saved schema 2 and 3 files embed their observations. Back up **both `scans/` and `design-inputs/`**. Raw JSON, USDZ, RGB, metadata, received ZIPs, and earlier revisions remain untouched and Git-ignored.
 
 ### Geometry and review limits
 

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from import_scan import file_hash, read_object, validate
 from review_geometry import enrich, review_queue, validate_observations
+from furniture import CATALOG, floor_anchors, validate_proposals, resolve_proposals
 
 COLLECTIONS = ("walls", "doors", "openings", "windows", "floors", "objects")
 PREFIX = dict(zip(COLLECTIONS, ("W", "D", "O", "G", "F", "")))
@@ -95,6 +96,8 @@ class DesignStore:
         angle = math.atan2(longest["transform"][2], longest["transform"][0]) if longest else 0
         self.rotation = (angle + math.pi / 2) % math.pi - math.pi / 2
         self.observations = {}
+        self.original_elements = [self.resolved(e, {"overrides": {}, "decision": "unsure" if e['source']['collection'] == 'objects' else None}) for e in self.elements]
+        self.floors = floor_anchors(self.original_elements)
         observations_path = self.output / "reference-observations.json"
         if observations_path.exists():
             evidence = read_object(observations_path)
@@ -109,10 +112,11 @@ class DesignStore:
 
     def new(self):
         return {
-            "format": FORMAT, "schema_version": 2, "revision": 0,
+            "format": FORMAT, "schema_version": 3, "revision": 0,
             "saved_at": None, "parent": None, "source": copy.deepcopy(self.source),
             "coordinates": COORDINATES, "plan_rotation_radians": self.rotation,
             "reference_observations": copy.deepcopy(self.observations), "reviews": {},
+            "proposals": [],
             "elements": [{"source": copy.deepcopy(e["source"]), "overrides": {},
                           "decision": "unsure" if e["source"]["collection"] == "objects" else None}
                          for e in self.elements],
@@ -120,6 +124,9 @@ class DesignStore:
 
     def validate_document(self, doc):
         expected = self.new()
+        if isinstance(doc, dict) and type(doc.get("schema_version")) is int and doc['schema_version'] in (1, 2):
+            expected.pop('proposals')
+            expected['schema_version'] = doc['schema_version']
         if isinstance(doc, dict) and type(doc.get("schema_version")) is int and doc["schema_version"] == 1:
             expected.pop("reference_observations")
             expected.pop("reviews")
@@ -150,7 +157,7 @@ class DesignStore:
                 raise ValueError("Invalid furniture decision")
             changes = edit["overrides"]
             allowed = {"label", "category", "dimensions_m", "note"}
-            if doc["schema_version"] == 2:
+            if doc["schema_version"] >= 2:
                 allowed |= {"color", "excluded"}
             if not isinstance(changes, dict) or set(changes) - allowed:
                 raise ValueError("Unsupported override")
@@ -171,7 +178,7 @@ class DesignStore:
             for value in dims.values():
                 if not finite(value) or not 0 < value <= 100:
                     raise ValueError("Corrected dimensions must be finite, greater than 0 and at most 100 meters")
-        if doc["schema_version"] == 2:
+        if doc["schema_version"] >= 2:
             validate_observations(doc["reference_observations"], self.elements, self.manifest)
             reviews = doc["reviews"]
             if (not isinstance(reviews, dict) or len(reviews) > 1000
@@ -179,6 +186,8 @@ class DesignStore:
                            or value not in ("confirmed", "corrected", "excluded", "skipped")
                            for key, value in reviews.items())):
                 raise ValueError("Invalid review resolutions")
+        if doc['schema_version'] == 3:
+            validate_proposals(doc['proposals'], self.floors, [e['source']['identifier'] for e in self.elements])
         return doc
 
     def upgrade(self, doc):
@@ -186,6 +195,8 @@ class DesignStore:
         doc = copy.deepcopy(doc)
         if doc["schema_version"] == 1:
             doc.update(schema_version=2, reference_observations=copy.deepcopy(self.observations), reviews={})
+        if doc['schema_version'] == 2:
+            doc.update(schema_version=3, proposals=[])
         return doc
 
     def project(self, matrix, point):
@@ -266,6 +277,8 @@ class DesignStore:
         bounds = [min(p[0] for p in points), min(p[1] for p in points),
                   max(p[0] for p in points), max(p[1] for p in points)] if points else [-1, -1, 1, 1]
         return {"document": doc, "elements": elements, "bounds": bounds,
+                "proposals": resolve_proposals(doc['proposals'], self.floors, self.original_elements, self.rotation),
+                "furniture_catalog": copy.deepcopy(CATALOG), "placement_floors": self.floors,
                 "review_queue": review_queue(elements, doc["reviews"]),
                 "reference": dict(read_object(self.scan / "Reference.json"), url="/reference.jpg") if self.manifest["rgb_reference_available"] else None,
                 "filename": filename, "output_directory": str(self.output),

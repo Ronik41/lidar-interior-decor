@@ -1,0 +1,23 @@
+[
+  {
+    "id": "sheen-chair-v1",
+    "name": "Sheen lounge chair",
+    "author": "Eric Chadwick / Wayfair (2020)",
+    "license": "CC0-1.0",
+    "source_url": "https://github.com/KhronosGroup/glTF-Sample-Assets/tree/7d4ba189827916452eeadc82d4b712dbc6280a6f/Models/SheenChair",
+    "model_url": "/models/sheen-chair/SheenChair.glb",
+    "sha256": "f0af2a2b102d28d540236306ae19f8fb36842df76bd38cf76f063f9bd2853399",
+    "dimensions_m": [
+      0.826557978,
+      0.68624707785,
+      0.570265459
+    ],
+    "model_offset_m": [
+      0.000743411,
+      6.977785e-05,
+      -0.0084076295
+    ],
+    "dimension_basis": "Authored glTF metre-scale bounds (W \u00d7 H \u00d7 D), unscaled. Not a measured retail product.",
+    "description": "Detailed upholstered lounge chair with curved cushions, timber frame and metal fittings. A separate proposal, never captured furniture."
+  }
+]

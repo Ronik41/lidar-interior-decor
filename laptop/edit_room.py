@@ -17,6 +17,7 @@ from design_input import DesignStore
 from reconstruction_assets import ReconstructionAssets
 from benchmark_assets import BenchmarkAssets
 from import_scan import import_scan, read_object
+from furniture import MODEL_ROOT, CATALOG, verify_models
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = Path(__file__).with_name("editor")
@@ -37,7 +38,7 @@ def make_server(store, initial_document, initial_filename, port=0, reconstructio
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+            self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
             self.end_headers()
             self.wfile.write(body)
 
@@ -82,7 +83,10 @@ def make_server(store, initial_document, initial_filename, port=0, reconstructio
                 elif route.path == "/reference.jpg" and store.manifest["rgb_reference_available"]:
                     store.verify()
                     self.respond(200, (store.scan / "Reference.jpg").read_bytes(), "image/jpeg")
-                elif route.path in ("/", "/app.js", "/style.css", "/scene.js", "/reference.js", "/vendor/three.module.js", "/vendor/three.core.js", "/vendor/OrbitControls.js", "/vendor/GLTFLoader.js", "/vendor/BufferGeometryUtils.js", "/vendor/SkeletonUtils.js", "/vendor/Pass.js", "/vendor/spark.module.js"):
+                elif route.path in {item['model_url'] for item in CATALOG}:
+                    verify_models()
+                    self.respond(200, (MODEL_ROOT / route.path.removeprefix('/models/')).read_bytes(), 'model/gltf-binary')
+                elif route.path in ("/", "/app.js", "/style.css", "/scene.js", "/reference.js", "/furniture.js", "/vendor/three.module.js", "/vendor/three.core.js", "/vendor/OrbitControls.js", "/vendor/GLTFLoader.js", "/vendor/BufferGeometryUtils.js", "/vendor/SkeletonUtils.js", "/vendor/Pass.js", "/vendor/spark.module.js"):
                     name = "index.html" if route.path == "/" else route.path[1:]
                     mime = "text/javascript; charset=utf-8" if name.endswith(".js") else "text/css; charset=utf-8" if name.endswith(".css") else "text/html; charset=utf-8"
                     self.respond(200, (ASSETS / name).read_bytes(), mime)

@@ -16,6 +16,7 @@
   <div id="message" role="status" aria-live="polite"></div>
   <main>
     <aside class="inventory">
+      <section class="proposal-section"><div class="section-head"><h2>Proposed furniture</h2><span class="count" id="proposal-count">0</span></div><div id="furniture-catalog"></div><p id="proposal-model-status" class="warning" role="status" hidden></p><div id="proposals"></div></section>
       <section class="review-section"><div class="section-head"><h2>Needs review</h2><span class="count" id="review-count"></span></div><p class="muted">Only uncertain categories and important conflicts.</p><div id="review-queue"></div><button id="show-skipped" class="quiet">Show skipped</button></section>
       <div class="section-head"><h2>Room elements</h2><span id="element-count" class="count"></span></div>
       <p class="muted">One selection across 3D, plan, and inspector.</p>
@@ -31,10 +32,11 @@
         <p id="capture-provenance"></p>
       </div>
       <div id="scene-tools"><label><input type="checkbox" id="cutaway" checked> Cutaway walls</label><label><input type="checkbox" id="show-excluded" checked> Excluded outlines</label><button id="focus-3d">Focus selected</button><button id="fit-3d">Fit room</button></div>
+      <div id="placement-bar" hidden><span id="placement-instruction"></span><button id="cancel-placement">Cancel · Esc</button></div>
       <div id="scene-wrap"><div class="scene-caption">Bounding-box furniture · drag to orbit · scroll to zoom</div><div id="scene"></div><div id="scene-error" hidden></div></div>
       <div class="overhead-heading"><span>LINKED OVERHEAD <small>layout &amp; dimensions</small></span><div class="zoom"><button id="zoom-out" aria-label="Zoom plan out">−</button><button id="zoom-in" aria-label="Zoom plan in">+</button><button id="fit">Fit plan</button></div></div>
       <div id="plan-wrap"><svg id="plan" role="img" aria-label="RoomPlan floor plan, one consistent meter scale" preserveAspectRatio="xMidYMid meet"></svg></div>
-      <div class="legend"><span><i class="wall"></i>Wall</span><span><i class="door"></i>Door</span><span><i class="opening"></i>Opening</span><span><i class="keep"></i>Keep</span><span><i class="remove"></i>Remove</span><span><i class="unsure"></i>Unsure</span></div>
+      <div class="legend"><span><i class="proposal-swatch"></i>Proposed furniture</span><span><i class="wall"></i>Wall</span><span><i class="door"></i>Door</span><span><i class="opening"></i>Opening</span><span><i class="keep"></i>Keep</span><span><i class="remove"></i>Remove</span><span><i class="unsure"></i>Unsure</span></div>
       <div class="color-key"><span><i class="observed"></i>Photo-supported, approximate</span><span><i class="chosen"></i>User choice</span><span><i class="unknown"></i>Hatched = color unknown</span></div>
       <div class="plan-note" id="layer-note"><strong>RoomPlan estimates, not a photorealistic room.</strong> Full-height planes; no measured wall thickness or door swings. Cutaway fades near walls to see inside. The plan helps inspect clearances; it does not validate fit.</div>
       <div class="summary" id="summary"></div>
