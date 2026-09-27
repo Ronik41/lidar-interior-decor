@@ -16,6 +16,9 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
     var captureSparseFrames = false
     var captureRoomPass = false
     var captureDenseFrames = false
+    var captureVideoFrames = false
+    private let nextVideoPhaseButton = UIButton(type: .system)
+    private var videoRecorder: VideoFrameRecorder?
     private let coverageLabel = UILabel()
     private var roomPassEndTimer: Timer?
     var runBoundedProbe = false
@@ -55,7 +58,7 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         if captureRoomPass {
             coverageLabel.numberOfLines = 0
             coverageLabel.textAlignment = .center
-            coverageLabel.font = .systemFont(ofSize: captureDenseFrames ? 13 : 14, weight: .semibold)
+            coverageLabel.font = .systemFont(ofSize: (captureDenseFrames || captureVideoFrames) ? 13 : 14, weight: .semibold)
             coverageLabel.textColor = .white
             coverageLabel.backgroundColor = UIColor.black.withAlphaComponent(0.78)
             coverageLabel.layer.cornerRadius = 8
@@ -68,13 +71,33 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
                 coverageLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
                 coverageLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
                 coverageLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
-                coverageLabel.heightAnchor.constraint(equalToConstant: captureDenseFrames ? 200 : 165)
+                coverageLabel.heightAnchor.constraint(equalToConstant: captureVideoFrames ? 220 : captureDenseFrames ? 200 : 165)
             ])
+            if captureVideoFrames {
+                nextVideoPhaseButton.setTitle("Preparing video…", for: .normal)
+                nextVideoPhaseButton.isEnabled = false
+                nextVideoPhaseButton.backgroundColor = .systemBackground
+                nextVideoPhaseButton.layer.cornerRadius = 8
+                nextVideoPhaseButton.addTarget(self, action: #selector(nextVideoPhase), for: .touchUpInside)
+                nextVideoPhaseButton.translatesAutoresizingMaskIntoConstraints = false
+                view.addSubview(nextVideoPhaseButton)
+                NSLayoutConstraint.activate([
+                    nextVideoPhaseButton.topAnchor.constraint(equalTo: coverageLabel.bottomAnchor, constant: 6),
+                    nextVideoPhaseButton.leadingAnchor.constraint(equalTo: coverageLabel.leadingAnchor),
+                    nextVideoPhaseButton.trailingAnchor.constraint(equalTo: coverageLabel.trailingAnchor),
+                    nextVideoPhaseButton.heightAnchor.constraint(equalToConstant: 44)
+                ])
+            }
         }
     }
 
+    @objc private func nextVideoPhase() { videoRecorder?.advancePhase() }
+
     private var captureVersionLabel: String {
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") ?? "?"
+        if captureVideoFrames {
+            return "Build \(build) · video-rgb-v1 · target 30 fps\n\(runBoundedProbe ? "40s codec test · auto-stop" : "Your pace · up to 6min + 30s test")"
+        }
         if captureDenseFrames {
             return "Build \(build) · \(DenseFrameRecorder.captureVersion)\n\(DenseFrameRecorder.guidanceVersion) · \(runBoundedProbe ? "40s test" : "3-minute pass") · target 8 Hz"
         }
@@ -168,7 +191,24 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
                 recordDiagnostic("Dense capture unavailable; RoomPlan continues: \(error.localizedDescription)")
             }
         }
-        if captureRoomPass && !runBoundedProbe {
+        if captureVideoFrames {
+            do {
+                videoRecorder = try VideoFrameRecorder(probe: runBoundedProbe)
+                videoRecorder?.onProgress = { [weak self] text, title, enabled in
+                    guard let self else { return }
+                    self.coverageLabel.text = "\(self.captureVersionLabel)\n\(text)"
+                    self.nextVideoPhaseButton.setTitle(title, for: .normal)
+                    self.nextVideoPhaseButton.isEnabled = enabled && self.isScanning
+                }
+                videoRecorder?.onFinished = { [weak self] in self?.stopSession() }
+                videoRecorder?.start(session: roomCaptureView.captureSession.arSession)
+                recordDiagnostic("Video experiment enabled: target 30fps HEVC + exact frame metadata, 2Hz depth, manual phases")
+            } catch {
+                coverageLabel.text = "Video unavailable\n\(error.localizedDescription)\nRoomPlan continues; tap Done."
+                recordDiagnostic("Video unavailable; RoomPlan continues: \(error.localizedDescription)")
+            }
+        }
+        if captureRoomPass && !runBoundedProbe && !captureVideoFrames {
             probeTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.recordDiagnostic("Room pass") }
             roomPassEndTimer = Timer.scheduledTimer(withTimeInterval: 180, repeats: false) { [weak self] _ in self?.stopSession() }
         }
@@ -193,6 +233,8 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         roomPassEndTimer?.invalidate()
         sparseRecorder?.stop(reason: isDiscarding ? "scan discarded" : "scan completed")
         denseRecorder?.stop(reason: isDiscarding ? "scan discarded" : "scan completed")
+        videoRecorder?.stop(reason: isDiscarding ? "scan discarded" : "scan completed")
+        nextVideoPhaseButton.isEnabled = false
         guard isScanning else { return }
         isScanning = false
         UIApplication.shared.isIdleTimerDisabled = false
@@ -261,6 +303,8 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         roomPassEndTimer?.invalidate()
         sparseRecorder?.stop(reason: "RoomPlan capture error: \(error.localizedDescription)")
         denseRecorder?.stop(reason: "RoomPlan capture error: \(error.localizedDescription)")
+        videoRecorder?.stop(reason: "RoomPlan capture error: \(error.localizedDescription)")
+        nextVideoPhaseButton.isEnabled = false
         hasReportedCaptureError = true
         isScanning = false
         roomCaptureView.captureSession.stop()
@@ -339,6 +383,8 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
         let sparseSummary = recorder?.exportSummary()
         let dense = denseRecorder
         let denseSummary = dense?.exportSummary()
+        let video = videoRecorder
+        let videoSummary = video?.exportSummary()
         // Keep the UI responsive while RoomPlan exports and the ZIP is written.
         DispatchQueue.global(qos: .userInitiated).async {
             defer { try? FileManager.default.removeItem(at: destinationFolderURL) }
@@ -383,6 +429,19 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
                     }
                 }
 
+                var videoFiles: [String] = []
+                var videoNote = "Not requested."
+                if let video, let videoSummary {
+                    do {
+                        videoFiles = try video.copyCompleted(to: destinationFolderURL, summary: videoSummary)
+                        videoNote = "Opt-in video with exact per-frame metadata and sparse depth. Audit decoded presentation timestamps before reconstruction."
+                    } catch {
+                        videoNote = "Video unavailable: \(error.localizedDescription). RoomPlan preserved."
+                        let leftovers = (try? FileManager.default.contentsOfDirectory(at: destinationFolderURL, includingPropertiesForKeys: nil)) ?? []
+                        for file in leftovers where file.lastPathComponent.hasPrefix("Video-") || ["Video.mov", "VideoFrames.json"].contains(file.lastPathComponent) { try? FileManager.default.removeItem(at: file) }
+                    }
+                }
+
                 var hashes: [String: String] = [:]
                 for file in files {
                     let data = try Data(contentsOf: destinationFolderURL.appending(path: file))
@@ -418,6 +477,12 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
                     }
                     manifest["dense_frames"] = ["schema_version": 1, "index_file": "DenseFrames.json", "sha256": denseHashes]
                 }
+                if video != nil { manifest["video_capture_note"] = videoNote }
+                if !videoFiles.isEmpty {
+                    var videoHashes: [String: String] = [:]
+                    for name in videoFiles { videoHashes[name] = try VideoMovieWriter.sha256(destinationFolderURL.appendingPathComponent(name)) }
+                    manifest["video_frames"] = ["schema_version": 1, "index_file": "VideoFrames.json", "sha256": videoHashes]
+                }
                 let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
                 try manifestData.write(to: destinationFolderURL.appending(path: "manifest.json"))
 
@@ -434,7 +499,7 @@ class RoomCaptureViewController: UIViewController, RoomCaptureViewDelegate, Room
                     self.finishExport()
                     self.recordDiagnostic("Saved package: \(archiveURL.lastPathComponent)")
                     if self.captureRoomPass {
-                        self.coverageLabel.text = "Room saved · \(self.captureDenseFrames ? "dense RGB" : "RGB-D") + RoomPlan\nYou can close this scan. Keep the package for transfer."
+                        self.coverageLabel.text = "Room saved · \(self.captureVideoFrames ? "video" : self.captureDenseFrames ? "dense RGB" : "RGB-D") + RoomPlan\nYou can close this scan. Keep the package for transfer."
                         self.doneButton?.title = "Room saved"
                         return
                     }

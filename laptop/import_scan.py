@@ -19,6 +19,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 from sparse_frames import extension_hashes, validate_sparse
 from dense_frames import extension_hashes as dense_hashes, validate_dense
+from video_frames import extension_hashes as video_hashes, validate_video
 
 REQUIRED = {"Room.json", "Room.usdz"}
 REFERENCE = {"Reference.jpg", "Reference.json"}
@@ -100,6 +101,7 @@ def validate(source: Path) -> dict:
                 raise ValueError("Reference.jpg is not a JPEG")
     validate_sparse(source, manifest)
     validate_dense(source, manifest)
+    validate_video(source, manifest)
     return manifest
 
 
@@ -116,11 +118,12 @@ def package_folder(source: Path):
             members = archive.infolist()
             # The dense extension is opt-in. Retain old bounds for old packages.
             manifests = [m for m in members if PurePosixPath(m.filename).name == 'manifest.json']
-            dense = False
+            dense = video = False
             if len(manifests) == 1 and manifests[0].file_size <= 1024*1024:
                 header = json.loads(archive.read(manifests[0]))
                 dense = bool(dense_hashes(header))
-            if len(members) > (5600 if dense else 1250) or sum(m.file_size for m in members) > (2*MAX_PACKAGE_BYTES if dense else MAX_PACKAGE_BYTES):
+                video = bool(video_hashes(header))
+            if len(members) > (5600 if dense else 1700 if video else 1250) or sum(m.file_size for m in members) > (3*MAX_PACKAGE_BYTES if video else 2*MAX_PACKAGE_BYTES if dense else MAX_PACKAGE_BYTES):
                 raise ValueError("ZIP exceeds the single-room prototype limit")
             seen = set()
             for member in members:
@@ -154,7 +157,7 @@ def import_scan(source: Path, destination_root: Path) -> Path:
         with tempfile.TemporaryDirectory(prefix=".incoming-", dir=destination_root) as temporary:
             staging = Path(temporary) / "scan"
             staging.mkdir()
-            for name in ["manifest.json", *manifest["sha256"], *extension_hashes(manifest), *dense_hashes(manifest)]:
+            for name in ["manifest.json", *manifest["sha256"], *extension_hashes(manifest), *dense_hashes(manifest), *video_hashes(manifest)]:
                 shutil.copy2(folder / name, staging / name)
             validate(staging)
             os.replace(staging, destination)
@@ -163,6 +166,8 @@ def import_scan(source: Path, destination_root: Path) -> Path:
         print(f"Also verified {len(extension_hashes(manifest))} optional sparse RGB/depth files")
     if manifest.get("dense_frames"):
         print(f"Also verified {len(dense_hashes(manifest))} optional dense RGB/metadata/depth files")
+    if manifest.get("video_frames"):
+        print(f"Also verified {len(video_hashes(manifest))} optional video/metadata/depth files; run audit_video.py before reconstruction")
     print(f"Room model: {destination / 'Room.usdz'}")
     print(f"Room data:  {destination / 'Room.json'}")
     print(f"RGB image:  {destination / 'Reference.jpg' if manifest['rgb_reference_available'] else 'unavailable for this scan'}")

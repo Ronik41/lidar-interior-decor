@@ -67,6 +67,8 @@ The importer verifies every declared file's SHA-256, checks the JSON, USDZ conta
 
 ## Optional sparse RGB + LiDAR capture
 
+The opt-in [video capture experiment](VIDEO_CAPTURE_STATUS.md) adds a separate **Video experiment · move at your pace** button: manual Perimeter → Details → Gaps/Ceiling phases, then reserved test views. Build 5 passed a physical 40-second test: 1,126 video frames at 29.0 fps, exact decoded timestamps, and successful RoomPlan export. A full manual pass is ready but not yet tested. Existing capture modes remain available.
+
 The separate opt-in **Dense RGB experiment · 8 Hz** is documented in
 [DENSE_CAPTURE_STATUS.md](DENSE_CAPTURE_STATUS.md). It preserves both existing
 capture modes and adds exact per-frame metadata, optional depth, capture telemetry,
