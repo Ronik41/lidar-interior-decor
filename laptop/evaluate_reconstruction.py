@@ -15,6 +15,11 @@ def render_mesh(folder,out):
     start=time.monotonic();poses=out/'pose-refinement.json';frames=apply_poses(folder,load_frames(folder),poses if poses.exists() else None)
     selection=out/'frame-selection.json'
     train,test=selected_split(folder,frames,load_selection(selection)) if selection.exists() else split_frames(frames)
+    return render_mesh_views(folder,out,train,test)
+
+
+def render_mesh_views(folder,out,train,test):
+    start=time.monotonic()
     mesh=o3d.io.read_triangle_mesh(str(out/'colored-mesh.ply'));verts=np.asarray(mesh.vertices);tri=np.asarray(mesh.triangles)
     best=np.load(out/'texture-assignment.npz')['best_frame'];scene=o3d.t.geometry.RaycastingScene();scene.add_triangles(o3d.t.geometry.TriangleMesh.from_legacy(mesh))
     render_dir=out/'mesh-held-out';render_dir.mkdir(exist_ok=True)
@@ -38,11 +43,11 @@ def render_mesh(folder,out):
         name=Path(f['rgb_file']).stem;Image.fromarray(rgb).save(render_dir/(name+'.png'))
         np.savez_compressed(render_dir/(name+'-depth.npz'),depth=t,valid=valid)
         ref=np.asarray(Image.open(folder/f['rgb_file']).resize((w,h),Image.Resampling.LANCZOS));Image.fromarray(ref).save(render_dir/(name+'-reference.png'))
-        d=read_depth(folder,f);dr=np.asarray(Image.fromarray(d).resize((w,h),Image.Resampling.NEAREST));dv=(dr>0)&valid
+        d=read_depth(folder,f) if f.get('depth_file') and f.get('confidence_file') else np.zeros((1,1),dtype='f4');dr=np.asarray(Image.fromarray(d).resize((w,h),Image.Resampling.NEAREST));dv=(dr>0)&valid
         mse=np.mean((rgb.astype(float)-ref.astype(float))**2)
         measures.append({'frame':f['rgb_file'],'mesh_coverage_fraction':float(valid.mean()),'mesh_psnr_full_db':float(10*np.log10(255**2/max(mse,1e-9))),'mesh_ssim_full':float(structural_similarity(ref,rgb,channel_axis=2,data_range=255)),'median_depth_error_m':float(np.median(np.abs(dr[dv]-t[dv]))) if dv.any() else None,'depth_error_p90_m':float(np.percentile(np.abs(dr[dv]-t[dv]),90)) if dv.any() else None})
         print('Rendered',name,flush=True)
-    report={'held_out_policy':json.loads((out/'split.json').read_text())['policy'],'mesh_render_seconds':time.monotonic()-start,'views':measures}
+    split=json.loads((out/'split.json').read_text());report={'held_out_policy':split['policy'],'evaluation_kind':split.get('evaluation_kind','held_out'),'mesh_render_seconds':time.monotonic()-start,'views':measures}
     (out/'evaluation.json').write_text(json.dumps(report,indent=2))
 
 def compare(folder,out,splats):
@@ -54,11 +59,11 @@ def compare(folder,out,splats):
         r.update(splat_psnr_full_db=float(10*np.log10(255**2/max(mse,1e-9))),splat_ssim_full=float(structural_similarity(ar,br,channel_axis=2,data_range=255)))
         # Sensor images are landscape-native with roll; rotate all three equally for readable room details.
         row=Image.new('RGB',(3*480,680),(22,27,32));draw=ImageDraw.Draw(row)
-        for i,(label,im) in enumerate([('HELD-OUT PHOTO',ref),('RGB-D MESH',mesh),('GAUSSIAN SPLAT',splat)]):
+        for i,(label,im) in enumerate([('HELD-OUT PHOTO' if report.get('evaluation_kind','held_out')=='held_out' else 'TRAINING PHOTO',ref),('RGB-D MESH',mesh),('GAUSSIAN SPLAT',splat)]):
             im=im.rotate(-90,expand=True);im.thumbnail((470,626));row.paste(im,(i*480,38));draw.text((i*480+8,8),label+' · '+stem,fill='white')
         (out/'comparison').mkdir(exist_ok=True);row.save(out/'comparison'/(stem+'.jpg'),quality=94);rows.append(row)
     report['aggregate']={k:float(np.mean([v[k] for v in report['views']])) for k in ['mesh_coverage_fraction','mesh_psnr_full_db','mesh_ssim_full','splat_psnr_full_db','splat_ssim_full']}
-    report['metric_limits']='Same-session ARKit poses and LiDAR are not independent survey ground truth. PSNR/SSIM use full held-out images including unknown pixels. Reflections/exposure changes and calibration/pose error affect these numbers. Qualitative corner/detail inspection and navigation are required.'
+    report['metric_limits']=('TRAINING REPROJECTION ONLY: these cameras/images participated in fitting; no independent held-out score. ' if report.get('evaluation_kind')=='training_reprojection' else '')+'Same-session ARKit poses and LiDAR are not independent survey ground truth. PSNR/SSIM use the complete diagnostic images including unknown pixels; the evaluation_kind field states whether they were held out. Reflections/exposure changes and calibration/pose error affect these numbers. Qualitative corner/detail inspection and navigation are required.'
     (out/'evaluation.json').write_text(json.dumps(report,indent=2));print(json.dumps(report['aggregate'],indent=2))
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('source',type=Path);p.add_argument('output',type=Path);p.add_argument('--splat-renders',type=Path);a=p.parse_args()

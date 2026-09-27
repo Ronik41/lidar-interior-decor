@@ -108,6 +108,11 @@ def reconstruct(folder,out,voxel=.025,poses=None,selection=None):
     index=folder/('DenseFrames.json' if chosen else 'Frames.json')
     split={'source_scan_id':manifest['scan_id'],'index_sha256':hashlib.sha256(index.read_bytes()).hexdigest(),'train':[f['rgb_file'] for f in train],'held_out':[f['rgb_file'] for f in test],'excluded_held_out_frames':[f['rgb_file'] for f in frames if f.get('capture_phase')=='held_out'],'policy':'Held-out RGB and depth excluded from mesh, texture, seed, and splat training; all captures in final test phase excluded even if not selected for evaluation.'}
     (out/'split.json').write_text(json.dumps(split,indent=2))
+    return fuse_frames(folder,out,train,test,voxel,manifest['scan_id'],start)
+
+
+def fuse_frames(folder,out,train,test,voxel,source_scan_id,start):
+    """Shared fixed fusion implementation; callers establish immutable source/split."""
     c=o3d.core
     volume=o3d.t.geometry.VoxelBlockGrid(attr_names=('tsdf','weight','color'),attr_dtypes=(c.float32,c.float32,c.float32),attr_channels=((1),(1),(3)),voxel_size=voxel,block_resolution=16,block_count=3000,device=c.Device('CPU:0'))
     for i,f in enumerate(train):
@@ -130,7 +135,7 @@ def reconstruct(folder,out,voxel=.025,poses=None,selection=None):
     fusion_seconds=time.monotonic()-start
     seeds=prepare_brush(folder,out,train,test,mesh)
     photo=texture_mesh(folder,out,train,mesh)
-    report={'fusion_backend':'Open3D tensor VoxelBlockGrid CPU','source_scan_id':manifest['scan_id'],'train_frames':len(train),'test_frames':len(test),'vertices':len(mesh.vertices),'triangles':len(mesh.triangles),'small_component_triangles_removed':removed,'seed_points':seeds,'voxel_m':voxel,'confidence_minimum':2,'range_m':[.2,4.5],'fusion_seconds':fusion_seconds,'total_seconds':time.monotonic()-start,'bounds_m':[mesh.get_min_bound().tolist(),mesh.get_max_bound().tolist()],**photo}
+    report={'fusion_backend':'Open3D tensor VoxelBlockGrid CPU','source_scan_id':source_scan_id,'train_frames':len(train),'test_frames':len(test),'vertices':len(mesh.vertices),'triangles':len(mesh.triangles),'small_component_triangles_removed':removed,'seed_points':seeds,'voxel_m':voxel,'confidence_minimum':2,'range_m':[.2,4.5],'fusion_seconds':fusion_seconds,'total_seconds':time.monotonic()-start,'bounds_m':[mesh.get_min_bound().tolist(),mesh.get_max_bound().tolist()],**photo}
     (out/'mesh-report.json').write_text(json.dumps(report,indent=2));print(json.dumps(report,indent=2))
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('source',type=Path);p.add_argument('output',type=Path);p.add_argument('--voxel',type=float,default=.025);p.add_argument('--poses',type=Path);a=p.parse_args();reconstruct(a.source.resolve(),a.output.resolve(),a.voxel,a.poses)

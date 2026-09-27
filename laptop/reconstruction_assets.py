@@ -10,7 +10,7 @@ class ReconstructionAssets:
         if self.metadata.get('source_scan_id')!=store.source['scan_id']:
             raise ValueError('Reconstruction belongs to a different RoomPlan session; explicit registration is required')
         index_name=self.metadata.get('frames_index_file','Frames.json')
-        if index_name not in ('Frames.json','DenseFrames.json'):
+        if index_name not in ('Frames.json','DenseFrames.json','VideoFrames.json'):
             raise ValueError('Unsupported reconstruction frame index')
         index=store.scan/index_name
         if not index.exists() or hashlib.sha256(index.read_bytes()).hexdigest()!=self.metadata.get('frames_sha256'):

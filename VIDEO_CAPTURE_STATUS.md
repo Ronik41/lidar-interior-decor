@@ -1,7 +1,7 @@
 # Opt-in video capture experiment — build 5
 
 Status: **build 5 installed; physical 40-second recording test passed**.
-A full manual-route video pass is prepared but has not been captured or reconstructed. Existing
+The subsequent full recording is documented in [VIDEO_ROOM_RECONSTRUCTION_STATUS.md](VIDEO_ROOM_RECONSTRUCTION_STATUS.md). It contains the entire 170.75-second pass, with no reserved test phase. Existing
 RoomPlan, sparse, 2 Hz guided and 8 Hz JPEG modes remain separate. No previous scan,
 reconstruction, raw camera metadata or held-out split is replaced. Room data stays
 local. Video is an experiment, not a claim of higher reconstruction quality.
@@ -195,5 +195,6 @@ The 12,024 prior non-Finder-metadata assets in the preceding preservation invent
 also retained their hashes (`validation/video-capture/older-assets-preservation.json`).
 The more recent TV/couch files were only read during this task.
 
-No full video reconstruction has been run. No old model is replaced. There is no
-quality claim or new training parameter search in this capture-format test.
+The short codec test was not reconstructed. The later full recording and its
+unchanged-settings reconstruction are documented in `VIDEO_ROOM_RECONSTRUCTION_STATUS.md`.
+No old model is replaced, and this capture-format test makes no quality claim.
