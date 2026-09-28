@@ -6,15 +6,15 @@ reconstructions, design-inputs, or other private room files.
 """
 
 from pathlib import Path
+import sys
 
-import cv2
-import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parents[1]
 MEDIA = ROOT / "docs" / "media"
 OUT = MEDIA / "room-decor-tour.mp4"
+GIF_OUT = MEDIA / "room-decor-tour.gif"
 SIZE = (1280, 720)
 FPS = 24
 SECONDS_PER_SHOT = 5
@@ -51,17 +51,34 @@ def frame(source, title, subtitle):
     draw.text((32, 623), title, font=font(30), fill=(245, 248, 245))
     draw.text((32, 665), subtitle, font=font(21), fill=(177, 204, 195))
     draw.text((1100, 680), "PROTOTYPE", font=font(14), fill=(143, 169, 161))
-    return np.asarray(canvas)[:, :, ::-1].copy()
+    return canvas
+
+
+def build_gif():
+    frames = [frame(filename, title, subtitle).resize((960, 540), Image.Resampling.LANCZOS)
+              for filename, title, subtitle in SHOTS]
+    frames[0].save(
+        GIF_OUT, save_all=True, append_images=frames[1:], duration=5000,
+        loop=0, optimize=True,
+    )
+    print(f"Wrote {GIF_OUT} ({GIF_OUT.stat().st_size:,} bytes)")
 
 
 def main():
+    build_gif()
+    if "--gif-only" in sys.argv[1:]:
+        return
+
+    import cv2
+    import numpy as np
+
     writer = cv2.VideoWriter(str(OUT), cv2.VideoWriter_fourcc(*"avc1"), FPS, SIZE)
     if not writer.isOpened():
         raise RuntimeError("The local OpenCV build has no H.264 encoder")
     try:
         for filename, title, subtitle in SHOTS:
             for _ in range(FPS * SECONDS_PER_SHOT):
-                picture = frame(filename, title, subtitle)
+                picture = np.asarray(frame(filename, title, subtitle))[:, :, ::-1].copy()
                 writer.write(picture)
     finally:
         writer.release()

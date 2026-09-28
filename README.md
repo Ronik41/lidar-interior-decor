@@ -6,7 +6,7 @@ Built by **Roni Katcharovski** from Apple's RoomPlan sample. The verified export
 
 ![Full-room decor editor](docs/media/room-decor.png)
 
-**[Watch the 20-second feature tour](docs/media/room-decor-tour.mp4)** · [See the demo gallery](docs/DEMO.md) · [Read the research notes](docs/RESEARCH.md)
+**[Watch the 20-second feature tour](docs/media/room-decor-tour.gif)** · [Download the MP4](docs/media/room-decor-tour.mp4) · [See the demo gallery](docs/DEMO.md) · [Read the research notes](docs/RESEARCH.md)
 
 The tour uses screenshots of a real room prototype. Raw photographs, LiDAR buffers, scan archives, reconstructed room assets, and saved real-room revisions are not in this repository. The photographic scene shown in the tour is an experimental local render; it is recognizably the room but visibly soft in fine details.
 

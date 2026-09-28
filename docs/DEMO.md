@@ -1,6 +1,8 @@
 # Full-room furniture demo
 
-[Watch the 20-second feature tour](media/room-decor-tour.mp4)
+![20-second feature tour of the room editor](media/room-decor-tour.gif)
+
+[Download the MP4](media/room-decor-tour.mp4)
 
 The tour is assembled from screenshots of a running local prototype. It shows a real captured room with four saved design props; it is **not** a recording of continuous movement, and the private room model is not included in this repository.
 
