@@ -1,194 +1,79 @@
-# Room scan → photographic walkthrough + editable plan
+# Room Review
 
-A local, single-user RoomPlan prototype continued from [Apple's sample](https://developer.apple.com/documentation/roomplan/create-a-3d-model-of-an-interior-room-by-guiding-the-user-through-an-ar-experience). The sample license is retained in `LICENSE.txt`. One room only; no design generation, shopping, accounts in the app, or cloud backend.
+An iPhone and Mac prototype for capturing one interior room, inspecting its geometry, and placing 3D decor in a navigable scene. The scanner exports a verified RoomPlan package; a local browser editor connects a 3D walkthrough, a measured-scale floor plan, and scene-aware decor placement.
 
-## Local decor library and collision
+Built by **Roni Katcharovski** from Apple's RoomPlan sample. The verified export/import path, linked Mac editor, decor catalog, scene-scoped revisions, walkthrough collision, and experiments are project additions.
 
-The next bounded milestone adds a local chair, original side table, framed painting,
-and fruit bowl. Browse the **Local decor library**, place in 3D, then move, rotate,
-remove, save and reopen. Floor, wall and tabletop anchors are validated; fruit on
-another surface requires explicit height confirmation. These are design props,
-not product matches.
+![Full-room decor editor](docs/media/room-decor.png)
 
-```sh
-./laptop/furniture.command revision-0005.design.json
-```
+**[Watch the 20-second feature tour](docs/media/room-decor-tour.mp4)** · [See the demo gallery](docs/DEMO.md) · [Read the research notes](docs/RESEARCH.md)
 
-Revision 5 preserves the original saved chair and adds the table, attached bowl
-and wall art. Walk keeps a fixed 1.60 m eye height and slides/stops against RoomPlan
-walls, floor edges, captured obstacle estimates and placed furniture. Openings
-remain passable within captured floor coverage. Orbit provides unrestricted
-inspection. **Collision debug** shows the actual barriers and sampled walkable
-camera region; **Correct walk obstacle** lets you fix an incorrect detected box.
+The tour uses screenshots of a real room prototype. Raw photographs, LiDAR buffers, scan archives, reconstructed room assets, and saved real-room revisions are not in this repository. The photographic scene shown in the tour is an experimental local render; it is recognizably the room but visibly soft in fine details.
 
-See [DECOR_LIBRARY_STATUS.md](DECOR_LIBRARY_STATUS.md) for the scene interface,
-controls, licenses, old-revision compatibility, synthetic alternate room, tests,
-private screenshot locations and limits. The splat and all earlier revisions remain
-intact. The [chair-only milestone](FURNITURE_PLACEMENT_STATUS.md) is retained as
-historical evidence. No private scan assets are committed or uploaded.
+## What works
 
-## Open the room walkthrough
+- **Capture and transfer:** An iPhone RoomPlan session saves room geometry and optional camera/depth evidence in a ZIP with a manifest and SHA-256 hashes. A Mac importer validates the package before opening it. USB transfer was exercised on a physical phone.
+- **Linked room review:** Select the same wall, opening, floor, or detected object in the 3D view, 2D plan, and inspector. Corrections and review decisions are saved as immutable revisions; the original scan is retained.
+- **Decor placement:** A local catalog provides a chair, side table, framed painting, and fruit bowl. Floor, wall, and tabletop anchors store positions in scene coordinates. A bowl follows its support table when the table moves.
+- **Walkthrough:** Walk mode uses RoomPlan floor boundaries, walls, openings, object estimates, and placed-prop collision boxes. It stops or slides at barriers and holds a fixed eye height. Orbit mode allows unrestricted inspection. A debug overlay exposes the barriers used by the solver.
+- **Scene isolation:** Proposals and obstacle corrections belong to a scene ID. A second, synthetic room fixture loads different geometry without carrying over the first room's items.
+
+## Try the public fixture
+
+The full-room visual demo above uses private capture data. You can run the editor and placement controls with a **synthetic room** included in source:
 
 ```sh
-cd "/Users/ronikatch/Documents/ChatGPT/LIDAR interior decor"
-./laptop/walkthrough.command
+fixture_root="$(mktemp -d)"
+python3 laptop/make_alternate_scene.py "$fixture_root/sample-room"
+python3 laptop/edit_room.py "$fixture_root/sample-room"
 ```
 
-This opens the locally registered **As scanned** reconstruction with the separate editable RoomPlan layer and linked plan. See [RECONSTRUCTION_STATUS.md](RECONSTRUCTION_STATUS.md) for the actual device run, held-out comparison, commands and quality limits. Use the layer menu to compare the photographic mesh, Gaussian candidate and editable geometry. The original review-only room remains available with `python3 laptop/edit_room.py scans/0e996296-89b4-4e1e-ae15-9d082211006d`. Keep Terminal running; **Ctrl-C** stops it. Python's standard library serves on `127.0.0.1`; a pinned local copy of Three.js renders the model. No npm installation, cloud service, or runtime internet connection is needed for viewing. Reconstruction uses a separate optional Python environment and local Brush binary. WebGL is required for 3D; the 2D editor remains available when WebGL cannot start.
+This opens a local URL on `127.0.0.1`. The fixture has a floor, partition, opening, and cabinet; it does not contain anyone's room photograph or a photographic reconstruction. The editor needs Python 3 and a WebGL-capable browser. Its Three.js and Spark viewer files are bundled locally.
 
-The new [TV/couch-area capture](TV_COUCH_CAPTURE_STATUS.md) opens separately with `./laptop/tv_couch.command`. It uses the dense RGB recording from the smaller area, the unchanged mesh pipeline and one 6,000-step splat. All earlier launchers and reconstructions remain available.
-
-The following controls describe the **Editable RoomPlan** layer; the As scanned view additionally has Walk/Orbit, captured viewpoints, and Expand 3D.
-
-The optional [external Scaniverse benchmark](SCANIVERSE_BENCHMARK_STATUS.md) opens with `./laptop/benchmark.command`. It adds the user-supplied local PLY beside our second capture's unchanged 6,000-step splat. Choose a saved viewpoint, then **Switch to Scaniverse / Switch to our splat** to retain the same camera. Registration is rigid and approximate; Scaniverse is externally produced from a different capture. The ordinary walkthrough and second-capture launchers still work independently, without the benchmark file or Scaniverse software.
-
-The subsequent [joint RGB refinement check](JOINT_RGB_REFINEMENT_STATUS.md) stopped at its failed track-connectivity gate. No training poses or models were replaced; the current second-capture result remains the baseline.
-
-- **3D room:** drag to orbit, scroll/pinch to zoom, Shift-drag or right-drag to pan. **Fit room** restores the overview; **Focus selected** inspects an element. Arrow keys and +/− work when the canvas has focus. **Cutaway walls** fades near walls while retaining full-height geometry. Turn it off to inspect enclosure. Objects are explicit bounding-box proxies, not photorealistic furniture.
-- **Linked overhead:** the 2D plan stays beneath the model. **2D plan** expands it for layout, estimated dimensions, and clearance inspection. Select geometry, a 3D code label, or an inventory item: both views highlight the same source ID and share one inspector. The inventory resolves overlapping footprints. Plan **+ / −**, drag, and **Fit plan** retain their original behavior.
-- **Inspector:** Keep / Remove / Unsure, label/category corrections, dimensions, and notes work as before. Walls and floors have editable colors; object proxies can also receive a chosen color. **Use my chosen color** records a separate user-choice override. Uncheck it to restore the photo-supported estimate or unknown placeholder. Structure can be excluded; objects use Remove. Source detections are retained, with excluded items shown as contextual outlines in 3D and dashed in 2D.
-- **Needs review:** three cards at a time, from low/missing category confidence, medium/missing-confidence apertures, aperture/wall conflicts, and significant overlapping object estimates. Select a card to focus its 3D element(s), highlight the plan, and see the available photo. **Confirm**, **Save correction**, **Exclude selected**, or **Skip** records the outcome. Corrections use the inspector fields. Skipped items remain accessible through **Show skipped**. There are no prompts for every detection.
-- **Apply edits** previews changes in both views. **Save new revision** also applies pending fields and writes a new immutable file under `design-inputs/<scan-id>/`. Choose a revision and **Reopen** to load it from disk. **Original scan** clears edits without deleting saved revisions; **Reset element** clears its overrides and current review acknowledgements.
-
-The reference photo only covers part of the room. The existing scan has three manually inspected color samples, linked to exact image pixels and the image SHA-256: light wood floor, dark TV face, and a dark TV stand tentatively associated with RoomPlan's “table” detection 14. These are flat, approximate observed tones under that lighting, not calibrated materials or textures. All other source elements use neutral hatching to mean **color unknown**. The visible chair's exact correspondence was uncertain, so its color was left unknown. No wall paint color was inferred from the photo.
-
-The inspector separates **RoomPlan category confidence**, **unverified measurement accuracy**, and **color origin/certainty**. High category confidence never establishes dimensional accuracy. A photo cross shows a projected center, which may be occluded; a dot shows an inspected sample. Elements outside the photo are explicitly labeled as not located in that frame.
-
-### Saved data and demonstrations
+To import a capture made with the iOS app, open `RoomPlanExampleApp.xcodeproj` in Xcode, run it on a LiDAR-capable iPhone, export a scan, and import its ZIP:
 
 ```sh
-python3 laptop/edit_room.py "scans/<scan-id>"
-python3 laptop/edit_room.py "design-inputs/<scan-id>/revision-0003.design.json"
+python3 laptop/import_scan.py "/path/to/RoomScan.zip" --open
 ```
 
-ZIPs and external folders still go through the verified importer. Use `--no-open` or `--port 8765` as before. A saved file must remain in its canonical `design-inputs/<scan-id>/` location alongside the matching imported scan.
+The importer's expected core files are `manifest.json`, `Room.json`, and `Room.usdz`; the package may also contain RGB and depth evidence. See [the capture/import notes](MILESTONE1_STATUS.md) for the physically exercised path. Device signing and RoomPlan availability depend on the local Apple development setup.
 
-The original **revision 1** 2D demonstration remains unchanged. **Revision 2** demonstrates a TV label and Keep choice, with no measurement correction. **Revision 3** adds a skipped uncertain-door review and a wall-color override. These are explicitly labeled assistant-entered demonstrations, not the user's final furniture or paint preferences. Start from **Original scan** for a clean review.
+## How it is built
 
-New revisions use `roomplan-design-input` **schema 4**, retaining source hashes, IDs, JSON pointers, meter coordinates, and immutable parent filename/SHA-256 links. Schema 1, 2 and 3 files still load and upgrade in memory; they are never rewritten. Schema 4 adds scene identity, obstacle corrections and wall/tabletop attachments. Schema 3 added separate furniture `proposals` with asset identity and floor anchors. Schema 2 introduced `reference_observations`, `reviews`, and separate color/structure-exclusion overrides. The optional private `reference-observations.json` supplies inspected starting colors; saved schema 2 and 3 files embed their observations. Back up **both `scans/` and `design-inputs/`**. Raw JSON, USDZ, RGB, metadata, received ZIPs, and earlier revisions remain untouched and Git-ignored.
+```mermaid
+flowchart LR
+    A[iPhone RoomPlan + ARKit] --> B[Hashed scan ZIP]
+    B --> C[Mac package validator]
+    C --> D[Scene geometry adapter]
+    D --> E[Linked 3D and 2D editor]
+    E --> F[Scene-scoped decor revisions]
+    D --> G[Walk collision]
+    F --> G
+    H[Optional local photographic layer] --> E
+```
 
-### Geometry and review limits
+The spatial logic uses **RoomPlan geometry**, with meters and explicit scene transforms. The optional photographic layer supplies appearance only; it does not determine collision, dimensions, or usable clearance. Asset identity, license, dimensions, anchors, and collision bounds are recorded in the [local catalog](laptop/editor/models/catalog.json).
 
-The views use the same RoomPlan column-major local-to-world transforms in meters. The floor preserves its concave local-plane polygon. Object dimensions remain local X width / Y height / Z depth. Wall planes are cut using supplied parent-linked door/window/opening spans; no door swing, measured thickness, snapping, or fabricated detailed furniture is added. Cutaways alter visibility only. Missing/curved geometry is explicitly approximate.
+## Evidence and limits
 
-Dimension edits resize about the source center. Editing one surface does not move connected elements. Excluding an aperture fills its parent wall in the review model; the raw detection remains. Overlap review uses intersecting convex footprints plus vertical overlap, filters known parent/child pairs, and uses bounded thresholds (more than 0.025 m², 15% of the smaller footprint, and 0.08 m vertical overlap). These are review heuristics, not collision or clearance validation. Geometry/category changes re-open affected acknowledgements. Confirming a conflict does not prove it physically correct.
+The scan-to-Mac flow was completed on a physical iPhone. The decor milestone passed Python and JavaScript tests, cold-reopened a saved four-prop revision, and exercised walking, wall stops, openings, furniture blocks, and an alternate scene in the browser. [Implementation evidence](DECOR_LIBRARY_STATUS.md) and [research notes](docs/RESEARCH.md) describe the checks.
 
-See [3D_REVIEW_STATUS.md](3D_REVIEW_STATUS.md) for demonstrations and physical capture evidence, and [MILESTONE2_STATUS.md](MILESTONE2_STATUS.md) for the preserved 2D checkpoint.
+RoomPlan objects and dimensions are **estimates**. Collision boxes are conservative navigation aids, not verified physical clearances. The photographed room layer has missing surfaces and blurred fine detail; neither it nor the props establish photorealism or a purchasable product match. The demo is one room, with a second synthetic scene used to check isolation.
 
-## Scan → transfer → open
+## Repository layout
 
-1. Close Device Hub’s iPhone screen view and stop screen mirroring/recording. Run `RoomPlanExampleApp` **on the physical iPhone** and allow camera access. USB can stay connected.
-2. Tap **Start Scanning**, slowly scan the walls and furniture of **one room**, then **Done**. Hold a useful view of the room as you tap Done: this is when the optional reference photo is captured.
-3. Wait for the result, then tap **Export**. Choose **AirDrop → your Mac**. The complete package is one `RoomScan-<UTC-date>-<UUID>.zip` file.
-4. From this repository in Terminal, run the command below, replacing the quoted path with the received ZIP (dragging the ZIP from Finder into Terminal supplies its path):
-
-   ```sh
-   python3 laptop/import_scan.py "/path/to/RoomScan-....zip" --open
-   ```
-
-The importer verifies every declared file's SHA-256, checks the JSON, USDZ container, and optional camera metadata, then publishes a validated copy to `scans/<scan-id>/`. It rechecks the copied files before completing. Re-importing an identical package is safe; conflicting contents never overwrite a previous import. The original ZIP stays untouched.
-
-`--open` opens Finder, the room JSON in TextEdit, the optional RGB image, and a small local USDZ viewer. Drag to orbit and scroll to zoom. The viewer compiles on first use with the installed Xcode toolchain and decodes the model before opening. It is a file-inspection fallback: Finder Quick Look currently reports “Failed to load configuration” on this Mac, even for a readable synthetic USDZ.
-
-## Optional sparse RGB + LiDAR capture
-
-The opt-in [video capture experiment](VIDEO_CAPTURE_STATUS.md) adds a separate **Video experiment · move at your pace** button: manual Perimeter → Details → Gaps/Ceiling phases, then reserved test views. Build 5 passed a physical 40-second test: 1,126 video frames at 29.0 fps, exact decoded timestamps, and successful RoomPlan export. The [latest full video reconstruction](VIDEO_ROOM_RECONSTRUCTION_STATUS.md) opens with `./laptop/video_room.command`; its entire recording span was used, including the ending. Existing capture modes remain available.
-
-The [completed 1440-pixel comparison](VIDEO_RESOLUTION_COMPLETED_STATUS.md) finished one unchanged-settings, 6,000-step run from that video's original prepared images. It took 11m 50s and did not meaningfully improve sharpness; the 960 baseline stays selected. All twelve matched training views, four detail crops, three qualitative navigation pairs and memory measurements are available locally. This recording has no held-out evaluation views.
-
-The separate opt-in **Dense RGB experiment · 8 Hz** is documented in
-[DENSE_CAPTURE_STATUS.md](DENSE_CAPTURE_STATUS.md). It preserves both existing
-capture modes and adds exact per-frame metadata, optional depth, capture telemetry,
-and a fixed same-capture 2 Hz versus denser reconstruction protocol. The physical three-minute capture passed (1,424 RGB-D frames). The completed
-controlled comparison found no meaningful overall quality gain: PSNR 19.18 versus
-19.16 dB, SSIM 0.7958 versus 0.7967. Both models and all twelve paired views are
-preserved; see that status document for evidence, route limitations and commands.
-
-On the phone, choose **Sparse RGB + depth experiment** instead of **Start Scanning**. It samples RoomPlan's existing `ARSession.currentFrame` every two seconds, at most 20 sets over 45 seconds. **Only frame sampling stops at that limit; ordinary scanning continues until you tap Done.** The command-line debug probe used for validation separately stops the whole scan at 40 seconds and saves automatically; normal app use does not have that timeout.
-
-Each accepted sample takes the RGB image, `sceneDepth`, depth-confidence map, timestamp, camera-to-world pose, and camera intrinsics from the **same ARFrame**. A background serial writer holds at most one frame. Non-normal tracking, absent depth/confidence, duplicate timestamps, or a busy writer cause skips. Serious/critical heat or an encoding pass over 750 ms stops sampling. The experiment never runs another ARSession, changes RoomPlan's configuration/frame semantics, or replaces its ARSession delegate. Optional sidecar export failures fall back to the working core scan package.
-
-The extension keeps the core **manifest schema 1** and core `sha256` inventory unchanged. Optional `sparse_frames` metadata contains its own version, index filename (`Frames.json`), and SHA-256 map. New importers validate and preserve both inventories; the original Milestone 1 importer can still read the 20-frame sparse package core payload but drops optional frames, so use the updated importer for archiving new packages. Old packages without this extension continue to import unchanged. The new three-minute `room-pass-v1` profile requires the updated importer because its denser ZIP exceeds the old reader’s 100-entry bound.
-
-| Optional file | Contents |
+| Path | Purpose |
 | --- | --- |
-| `Frames.json` | Ordered per-frame timestamps, poses, RGB/depth intrinsics, image/depth resolutions, packed row sizes, checksums, skip/error counters and encoding times |
-| `Frame-NNNN.jpg` | Sensor-native RGB JPEG |
-| `Frame-NNNN.depth.f32` | Row-major, tightly packed little-endian Float32 camera-plane depth in meters; nonfinite/nonpositive pixels are invalid |
-| `Frame-NNNN.confidence.u8` | Matching UInt8 depth confidence: 0 low, 1 medium, 2 high |
+| `RoomPlanExampleApp/` | iPhone capture and export app |
+| `laptop/import_scan.py` | Manifest, archive, and payload validation |
+| `laptop/edit_room.py` + `laptop/editor/` | Local editor and linked 3D/2D interface |
+| `laptop/scene_geometry.py` + `laptop/editor/navigation.js` | Scene adapter and walk collision |
+| `laptop/furniture.py` + `laptop/editor/models/` | Decor catalog, placement, provenance, and saved revisions |
+| `laptop/fixtures/` | Public synthetic scene |
+| `docs/` | Demo and concise research record |
 
-Depth intrinsics are scaled from RGB intrinsics to the depth resolution. There is no separately exposed LiDAR hardware timestamp here: synchronization means the values belong to the same ARFrame. Depth confidence is separate from RoomPlan category confidence. These frames are reference evidence; saving them does **not** create a fully textured room. The editor continues to use the original single reference photo for its inspected colors.
+## Licenses and data
 
-Apple documents the existing [RoomPlan ARSession](https://developer.apple.com/documentation/roomplan/roomcapturesession/arsession), [per-frame scene depth](https://developer.apple.com/documentation/arkit/arframe/scenedepth), and [depth/confidence semantics](https://developer.apple.com/documentation/arkit/ardepthdata). Device evidence and limitations are recorded in [3D_REVIEW_STATUS.md](3D_REVIEW_STATUS.md).
+The project began from Apple's RoomPlan sample; its [license](LICENSE.txt) is retained. Bundled Three.js and Spark viewer licenses are in `laptop/editor/vendor/`. The chair is a [CC0 glTF sample](laptop/editor/models/README.md); the other decor assets are original [CC0 models](laptop/editor/models/ORIGINAL-ASSETS.md).
 
-## If sharing is cancelled or AirDrop fails
-
-**The ZIP is already saved on the phone.** Tap Export again to share the same package. Returning from a share sheet preserves the completed scan.
-
-- On the iPhone: **Files → Browse → On My iPhone → RoomPlanExampleApp → Scans**. Long-press the ZIP → Share → AirDrop. This also works after closing the app.
-- USB fallback: connect and unlock the phone; in Mac **Finder → your iPhone → Files → RoomPlanExampleApp**, drag the `Scans` folder to the Mac. Import the ZIP inside it with the same command.
-- An already extracted scan folder works too: pass its path instead of the ZIP.
-
-Keep files under **On My iPhone** or transfer directly by USB/AirDrop to stay local. The app stores packages in its local Documents/Scans directory and excludes that directory from automatic backup. Camera images and scan data are ignored by Git under `scans/`.
-
-## One-time development setup
-
-The verified installation is **Xcode 27.0 (27A266a)** on **macOS 26.6.2**. The connected physical device was identified as **iPhone 18 Pro, iOS 27.0**. A Personal Team has been selected in this local project, with automatic signing enabled.
-
-If Xcode refuses to open after an update, this Mac's observed failure was an incompatible CoreDevice/Mercury component pair (`Symbol not found: _XPCTypeBool`). Completing the license and first-launch component installation repaired it:
-
-```sh
-sudo xcodebuild -license
-sudo xcodebuild -runFirstLaunch
-```
-
-Review/accept the license and enter the administrator password locally. This is Apple's [documented component installation flow](https://developer.apple.com/documentation/xcode/downloading-and-installing-additional-xcode-components).
-
-Open `RoomPlanExampleApp.xcodeproj`, choose the physical iPhone as the run destination, and press **Run**. If needed, sign in under **Xcode → Settings → Accounts**, then select your **Personal Team** under **Signing & Capabilities**. On the phone, enable **Settings → Privacy & Security → Developer Mode**, restart and confirm **Turn On**. Unlock and trust the Mac. If iOS subsequently requests developer trust, follow its prompt under **Settings → General → VPN & Device Management**.
-
-If iOS shows **Unable to Verify App**, connect the phone to working Wi-Fi or cellular data and retry **Verify App** in that developer entry. Apple certificate verification requires internet access; the scanner and transfer pipeline itself remains local. This Personal Team profile expires on October 3, 2026; run from Xcode again when renewal is needed.
-
-On this phone, the internet warning persisted despite connectivity. Device logs showed a reference-key attestation failure. Installing the offered iOS 27.0 update (24A427 → 24A437), then retrying Verify App, resolved the blocker; the installed scanner successfully launched afterward.
-
-**Black camera view / World tracking failure:** Device Hub screen mirroring repeatedly prevented tracking on this phone. With mirroring active, diagnostics showed authorized camera access but zero visual features and no depth data. After quitting Device Hub and starting on the physical phone, tracking became normal with visual features and depth data. Keep mirroring off while scanning. The app now checks for active screen capture before starting. A small local startup/error log (without images or room geometry) is kept in `Library/Caches/ScanDiagnostics.txt` for debugging.
-
-## Package contract
-
-| File | Contents |
-| --- | --- |
-| `manifest.json` | Schema version 1, full UUID, capture UTC time, device/OS, meter units, source, RGB availability, payload SHA-256 hashes |
-| `Room.json` | Structured `CapturedRoom` encoded by RoomPlan |
-| `Room.usdz` | RoomPlan `.mesh` export |
-| `Reference.jpg` | Optional single RGB frame captured before stopping |
-| `Reference.json` | Optional matching timestamp, resolution, camera pose, and intrinsics |
-
-A new export gets a timestamp and full UUID; retrying that completed export reuses its saved ZIP. The native archive writer uses Apple's [directory ZIP snapshot API](https://developer.apple.com/documentation/foundation/nsfilecoordinator/readingoptions/foruploading), then saves the ZIP before offering it to the share sheet. Partial exports are not published.
-
-RGB is an optional **reference photo**, not a textured reconstruction. The manifest records when it is unavailable. Image orientation is sensor-native; camera matrices are column-major, and ARKit's timestamp is monotonic session time, not Unix time. RoomPlan dimensions are estimates. Hashes check transfer integrity, not capture accuracy or authenticity.
-
-## Verification
-
-The original scan checkpoint is in `MILESTONE1_STATUS.md`; current 3D review and completed physical RGB-D evidence are in `3D_REVIEW_STATUS.md`.
-
-The first real scan completed on September 26, 2026: capture → saved ZIP → USB transfer → four verified payload hashes → Mac model/data/photo reopening. The imported scan has 8 walls and 20 detected objects, with a 1920×1440 reference photo and matching camera metadata. AirDrop remains an untested alternative. Real captures are local and ignored by Git.
-
-```sh
-python3 -m unittest discover -s laptop -v
-xcodebuild -project RoomPlanExampleApp.xcodeproj -scheme RoomPlanExampleApp \
-  -destination 'generic/platform=iOS' -derivedDataPath DerivedData \
-  -allowProvisioningUpdates -allowProvisioningDeviceRegistration build
-```
-
-The optional reconstruction environment passes **81 Python tests** with `.venv-reconstruction/bin/python -m unittest discover -s laptop -v`, covering the importer, editor/revisions, sparse and guided capture contracts, reconstruction assets, metric fusion, train-only pose overrides and identical-camera comparison. The standard-library test run skips tests requiring that optional environment. Run `node laptop/test_scene.mjs` for wall aperture cuts and camera projection checks. Their fixture geometry is synthetic; physical capture evidence is reported separately and does not establish dimensional accuracy.
-
-`laptop/test_archive.swift` can be compiled alongside `RoomPlanExampleApp/ScanArchive.swift` to exercise the exact native archive helper on macOS. Local test artifacts and logs belong in ignored `validation/`; app build products and the cached Mac viewer are also ignored.
-
-## Photographic room reconstruction
-
-The follow-up [pose-refinement experiment](POSE_REFINEMENT_STATUS.md) diagnoses blur and compares one registered rebuild at identical held-out camera poses. The original 6,000-step result remains the preserved baseline. [The second capture comparison](GUIDED_CAPTURE_COMPARISON.md) processes 357 new frames with the unchanged mesh and 6,000-step splat settings; open it with `./laptop/new_capture.command`. Its independent held-out views are not a controlled PSNR comparison against the original scan. [CAPTURE_GUIDE.md](CAPTURE_GUIDE.md) describes standing-position and movement coaching, but those prompts did **not** appear during the second physical scan: that update had been built but not installed. The old walkthrough command still opens the original result.
-
-The one-room reconstruction work and actual device evidence are documented in [RECONSTRUCTION_STATUS.md](RECONSTRUCTION_STATUS.md). The local source-only review/capture checkpoint is `ff6c088`; nothing was pushed.
-
-Open the locally registered reconstruction with `./laptop/walkthrough.command`, or run `python3 laptop/edit_room.py scans/SCAN_ID --reconstruction reconstructions/room-pass`. “As scanned” is a photographic reconstruction from the new room pass. “Editable RoomPlan” remains a separate, meter-scale layer for dimensions, review decisions, and the linked 2D plan. The prior scan and all its revisions remain available by passing their original path to the editor.
-
-Use the viewpoint menu to move around the captured room. In Walk mode drag to look and hold W/A/S/D to move at a fixed eye height with RoomPlan and furniture collision. Q/E do not change height. Orbit retains unrestricted orbit/pan/zoom. Collision follows estimated geometry, not verified physical clearance. Dark gaps and grey mesh patches are unknown. Photograph-derived appearance is not a paint measurement.
+`scans/`, `design-inputs/`, `reconstructions/`, and `validation/` are ignored because they can contain private room imagery, positions, and local test evidence. The committed demo media is an intentionally selected, cropped visual excerpt of the prototype; it contains no raw capture package or navigable room model.

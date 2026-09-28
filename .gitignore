@@ -32,3 +32,7 @@ xcuserdata/
 reconstructions/
 # Brush shader/autotuning cache
 target/
+
+# Private strategy notes; keep them outside the public repository.
+/PRODUCT_DIRECTION.md
+/RECONSTRUCTION_STRATEGY_REVIEW.md
